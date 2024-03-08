@@ -1,6 +1,7 @@
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
 import React,{useContext,useState} from 'react'
 import { UserType } from '../UserContext'
+import { FontAwesome5 } from '@expo/vector-icons';
 
 const User = ({item}) => {
   const {userId,setUserId}=useContext(UserType);
@@ -9,15 +10,17 @@ const User = ({item}) => {
   {
     try
     {
-      const res=await fetch('http://10.145.180.129:8000/friend-request',{
+      const res=await fetch('http://10.145.153.33:8000/friend-request',{
         method:'POST',
         headers:{
           "Content-Type":'application/json'
         },
         body:JSON.stringify({currentUserId,selectedUserId})
       });
+      console.log(res);
       if(res.ok)
       {
+        console.log(true)
         setRequestSent(true);
       }
     }
@@ -36,14 +39,25 @@ const User = ({item}) => {
           {item?.name}
         </Text>
       </View>
+      {console.log(requestSent)}
+      {item.status==="" &&
       <Pressable onPress={()=>sendFriendRequest(userId,item._id)} style={styles.btn}>
         <Text style={styles.btnText}>Add Friend</Text>
-      </Pressable>
+      </Pressable>}
+      {item.status==="friend" && 
+      <Pressable style={styles.friendsBtn}>
+        <FontAwesome5 name="user-friends" size={24} color="#1443a3" />
+        <Text style={styles.friendBtnText}>Friends</Text>
+    </Pressable>}
+    {item.status==="pending" && 
+      <Pressable style={styles.btnText}>
+        <Text style={styles.btnText}>Pending...</Text>
+    </Pressable>}
     </Pressable>
   )
 }
 
-export default User
+export default User;
 
 const styles = StyleSheet.create({
   image:{
@@ -74,5 +88,19 @@ const styles = StyleSheet.create({
   btnText:{
     color:'white',
     fontSize:13
+  },
+  friendsBtn:{
+    padding:10,
+    borderRadius:6,
+    width:105,
+    alignItems:'center',
+    flexDirection:'row',
+    gap:10,
+    alignItems:'center'
+  },
+  friendBtnText:{
+    color:'#1443a3',
+    fontSize:13,
+    fontWeight:'bold'
   }
 })
