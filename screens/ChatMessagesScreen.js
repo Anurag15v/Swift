@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View, ScrollView, KeyboardAvoidingView, TextInput, Pressable, Image, BackHandler } from 'react-native'
+import { StyleSheet, Text, View, ScrollView, KeyboardAvoidingView, TextInput, Pressable, Image, BackHandler, TouchableOpacity } from 'react-native'
 import React, { useState, useContext, useLayoutEffect, useEffect, useRef } from 'react'
 import { Entypo } from '@expo/vector-icons';
 import { Feather } from '@expo/vector-icons';
@@ -14,7 +14,6 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
 import LottieView from 'lottie-react-native';
 import { Audio, RecordingOptionsPresets } from "expo-av";
-
 
 const ChatMessagesScreen = () => {
     const [showEmojiSelector, setShowEmojiSelector] = useState(false);
@@ -58,7 +57,7 @@ const ChatMessagesScreen = () => {
         socket.on("stop-typing", () => {
             setIsTyping(false);
         });
-        
+
     }, [userId]);
 
     const fetchMessages = async () => {
@@ -67,7 +66,7 @@ const ChatMessagesScreen = () => {
             const data = await res.json();
             if (res.ok) {
                 setMessages(data);
-                socket.emit("join-chat", combinedId());
+                socket.emit("join-chat", { room: combinedId(), senderId: userId, recepientId });
             }
         }
         catch (error) {
@@ -84,7 +83,6 @@ const ChatMessagesScreen = () => {
 
         // Add listener to check if user is online
         socket.on("online", (status) => {
-            {console.log(status)};
             setOnline(status);
             if (!status) {
                 fetch(`http://10.145.192.186:8000/last-seen/${recepientId}`)
@@ -195,6 +193,10 @@ const ChatMessagesScreen = () => {
                 });
             } else {
                 formData.append("messageType", "text");
+                if (message === "") {
+                    // type something;
+                    return;
+                }
                 formData.append("messageText", message);
             }
             formData.append("roomId", combinedId());
@@ -237,21 +239,25 @@ const ChatMessagesScreen = () => {
                             <Text style={{ fontSize: 16, fontWeight: '500' }}>{selectedMessages.length}</Text>
                         </View>
                     ) : (
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                            <Image style={{
-                                width: 30,
-                                height: 30,
-                                borderRadius: 15,
-                                resizeMode: "cover",
-                            }}
-                                source={{ uri: recepientData?.image }} />
-                            <Text style={{ marginLeft: 5, fontSize: 15, fontWeight: 'bold' }}>{recepientData?.name}</Text>
-                            {online === true ?
-                                <Text style={{ color: 'green', marginLeft: 5 }}>Online</Text>
-                                :
-                                <Text style={{ color: 'gray', marginLeft: 5 }}>{lastSeenTime}</Text>
-                            }
-                        </View>)}
+                        <TouchableOpacity onPress={() => navigation.navigate("SingleChatProfile")}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                                <Image style={{
+                                    width: 30,
+                                    height: 30,
+                                    borderRadius: 15,
+                                    resizeMode: "cover",
+                                }}
+                                    source={{ uri: recepientData?.image }} />
+                                <View style={{ flexDirection: 'column' }}>
+                                    <Text style={{ marginLeft: 5, fontSize: 15, fontWeight: 'bold' }}>{recepientData?.name}</Text>
+                                    {online === true ?
+                                        <Text style={{ color: 'green', marginLeft: 5 }}>Online</Text>
+                                        :
+                                        <Text style={{ color: 'gray', marginLeft: 5 }}>{lastSeenTime}</Text>
+                                    }
+                                </View>
+                            </View>
+                        </TouchableOpacity>)}
                 </View>
             ),
             headerRight: () => selectedMessages.length > 0 ? (
@@ -261,7 +267,12 @@ const ChatMessagesScreen = () => {
                     <FontAwesome name="star" size={24} color="black" />
                     <MaterialIcons onPress={() => deleteMessages(selectedMessages)} name="delete" size={24} color="black" />
                 </View>
-            ) : null
+            ) : (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <Ionicons name="call" size={24} color="black" />
+                    <FontAwesome name="video-camera" size={24} color="black" />
+                </View>
+            )
         });
     }, [recepientData, selectedMessages, online, lastSeenTime]);
     const deleteMessages = async (messageIds) => {
@@ -342,20 +353,27 @@ const ChatMessagesScreen = () => {
         setShowModal(true);
         setImageUri(imageUrl);
     }
-    // useEffect(()=>
-    // {
-    //     const backAction=()=>
-    //     {
-    //         setShowModal(false);
-    //         setImageUri("");
-    //         return true;
-    //     }
-    //     const backHandler=BackHandler.addEventListener('hardwareBackPress',backAction);
-    //     return ()=>
-    //     {
-    //         backHandler.remove();            
-    //     }
-    // },[]);
+    useEffect(()=>
+    {
+        const backAction=()=>
+        {
+            if(showModal)
+            {
+                setShowModal(false);
+                setImageUri("");
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        const backHandler=BackHandler.addEventListener('hardwareBackPress',backAction);
+        return ()=>
+        {
+            backHandler.remove();            
+        }
+    },[showModal]);
 
     async function startRecording() {
         setIsRecording(true);

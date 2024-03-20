@@ -44,6 +44,7 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 let onlineUsers = [];
+let onlineRooms={};
 
 io.on("connection", (socket) => {
     console.log("connected to socket.io");
@@ -56,10 +57,32 @@ io.on("connection", (socket) => {
             console.log("new user is here!", onlineUsers);
         }
         socket.emit("connected");
+
+        // send each rooms that user got active again
+        let userConnectedRooms=onlineRooms[userData._id];
+        if(userConnectedRooms)
+        {
+            console.log(userConnectedRooms);
+            userConnectedRooms.forEach((item)=>
+            {
+                console.log(item);
+                socket.to(item[1]).emit("online", true);
+            });
+        }
     });
 
-    socket.on("join-chat", (room) => {
+    socket.on("join-chat", ({room,senderId,recepientId}) => {
         socket.join(room);
+        if(onlineRooms.hasOwnProperty(senderId))
+            onlineRooms[senderId].add([recepientId,room]);
+        else
+        onlineRooms[senderId]=new Set([recepientId,room]);
+        
+        if(onlineRooms.hasOwnProperty(recepientId))
+            onlineRooms[recepientId].add([senderId,room]);
+        else
+        onlineRooms[recepientId]=new Set([senderId,room]);
+
         console.log("User joined room", room);
     });
 
@@ -125,6 +148,7 @@ io.on("connection", (socket) => {
         // Emit the chat message to the recipient
         io.to(roomId).emit("message", message);
     });
+
     socket.on("disconnect", async () => {
         let userId = null;
         onlineUsers.forEach((user) => {
@@ -133,14 +157,27 @@ io.on("connection", (socket) => {
                 return;
             }
         });
-
+        
         if (userId) {
             // update last seen of disconneted user
             await User.updateOne({ _id: userId }, { $set: { lastSeen: Date.now()}});
         }
+        
+        // send each rooms that user got inactive
+        let userConnectedRooms=onlineRooms[userId];
+        if(userConnectedRooms)
+        {
+            userConnectedRooms.forEach((item)=>
+            {
+                socket.to(item[1]).emit("online", false);
+            });
+
+            // delete data but if we delete then if user re join from background. Then we lose data. 
+            // delete onlineRooms[userId];
+        }
         // remove user from active users
         onlineUsers = onlineUsers.filter((user) => user.socketId !== socket.id);
-
+        
         console.log("User Disconnected", socket.id);
     });
 });
