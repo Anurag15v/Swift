@@ -19,7 +19,7 @@ const RegisterScreen = () => {
         }
         // send post request to the backend API to register the user
         
-        axios.post("http://10.145.153.33:8000/register",user).then((res)=>
+        axios.post("http://10.145.192.186:8000/register",user).then((res)=>
         {
             Alert.alert("Registeration Successful","You have been registered successfully");
             setName("");

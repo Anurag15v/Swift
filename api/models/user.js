@@ -38,6 +38,10 @@ const userSchema = new mongoose.Schema({
       unique:true
     },
   ],
+  lastSeen:{
+    type:Date,
+    default: Date.now(), // Default value is the current date/time
+  }
 });
 
 

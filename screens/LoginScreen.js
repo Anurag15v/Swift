@@ -3,6 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, KeyboardAvoidingView, TextInput, Pressable } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import socket from '../socket';
+import {jwtDecode} from "jwt-decode";
 
 const LoginScreen = () => {
     const [email, setEmail] = useState("");
@@ -13,7 +15,15 @@ const LoginScreen = () => {
             try {
                 const token = await AsyncStorage.getItem("authToken");
                 if (token)
+                {
+                    socket.connect();
+                    const decodedToken = jwtDecode(token);
+                    const userId=decodedToken.userId;
+                    socket.emit("setup", {
+                        _id: userId
+                    });
                     navigation.replace("Home");
+                }
                 else {
                     // token not found show login screen
                 }
@@ -29,10 +39,15 @@ const LoginScreen = () => {
             email,
             password
         };
-        axios.post('http://10.145.153.33:8000/login', user).then((res) => {
-            console.log(res);
+        axios.post(`http://10.145.192.186:8000/login`, user).then((res) => {
             const token = res.data.token;
             AsyncStorage.setItem("authToken", token);
+            socket.connect();
+            const decodedToken = jwtDecode(token);
+            const userId=decodedToken.userId;
+            socket.emit("setup", {
+                _id: userId
+            });
             navigation.replace("Home");
 
         }).catch((err) => {

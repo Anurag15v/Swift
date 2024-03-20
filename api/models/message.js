@@ -10,7 +10,7 @@ const messageSchema = new mongoose.Schema({
     },
     messageType: {
         type: String,
-        enum: ['text', 'image']
+        enum: ['text', 'image','audio']
     },
     message: String,
     imageUrl: String,
