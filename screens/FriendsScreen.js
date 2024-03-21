@@ -12,7 +12,7 @@ const FriendsScreen = () => {
   }, []);
   const fetchFriendRequests = async () => {
     try {
-      const res =await axios.get(`http://10.145.192.186:8000/friend-request/${userId}`);
+      const res =await axios.get(`http://10.145.171.195:8000/friend-request/${userId}`);
       if (res.status === 200) {
         const friendRequestsData = res.data.map(friendRequest => (
           {

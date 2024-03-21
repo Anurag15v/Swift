@@ -10,7 +10,7 @@ const User = ({item}) => {
   {
     try
     {
-      const res=await fetch('http://10.145.192.186:8000/friend-request',{
+      const res=await fetch('http://10.145.171.195:8000/friend-request',{
         method:'POST',
         headers:{
           "Content-Type":'application/json'

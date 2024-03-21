@@ -3,7 +3,7 @@ import React, { useContext, useEffect, useLayoutEffect, useState } from 'react'
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { MaterialIcons } from '@expo/vector-icons';
-import { UserType } from '../UserContext'
+import { UserType } from '../UserContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {jwtDecode} from "jwt-decode";
 import { decode } from "base-64";
@@ -42,7 +42,7 @@ const HomeScreen = () => {
       const decodedToken = jwtDecode(token);
       const userId=decodedToken.userId;
       setUserId(userId);
-      axios.get(`http://10.145.192.186:8000/users/${userId}`).then((res)=>
+      axios.get(`http://10.145.171.195:8000/users/${userId}`).then((res)=>
       {
         setUsers(res.data);
       }).catch(err=>

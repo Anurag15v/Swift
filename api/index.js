@@ -44,7 +44,9 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 let onlineUsers = [];
-let onlineRooms={};
+let onlineRooms = {};
+let windowLeft={};
+
 
 io.on("connection", (socket) => {
     console.log("connected to socket.io");
@@ -59,29 +61,25 @@ io.on("connection", (socket) => {
         socket.emit("connected");
 
         // send each rooms that user got active again
-        let userConnectedRooms=onlineRooms[userData._id];
-        if(userConnectedRooms)
-        {
-            console.log(userConnectedRooms);
-            userConnectedRooms.forEach((item)=>
-            {
-                console.log(item);
+        let userConnectedRooms = onlineRooms[userData._id];
+        if (userConnectedRooms) {
+            userConnectedRooms.forEach((item) => {
                 socket.to(item[1]).emit("online", true);
             });
         }
     });
 
-    socket.on("join-chat", ({room,senderId,recepientId}) => {
+    socket.on("join-chat", ({ room, senderId, recepientId }) => {
         socket.join(room);
-        if(onlineRooms.hasOwnProperty(senderId))
-            onlineRooms[senderId].add([recepientId,room]);
+        if (onlineRooms.hasOwnProperty(senderId))
+            onlineRooms[senderId].add([recepientId, room]);
         else
-        onlineRooms[senderId]=new Set([recepientId,room]);
-        
-        if(onlineRooms.hasOwnProperty(recepientId))
-            onlineRooms[recepientId].add([senderId,room]);
+            onlineRooms[senderId] = new Set([recepientId, room]);
+
+        if (onlineRooms.hasOwnProperty(recepientId))
+            onlineRooms[recepientId].add([senderId, room]);
         else
-        onlineRooms[recepientId]=new Set([senderId,room]);
+            onlineRooms[recepientId] = new Set([senderId, room]);
 
         console.log("User joined room", room);
     });
@@ -104,7 +102,7 @@ io.on("connection", (socket) => {
         }
     });
 
-    socket.on("message", async (obj) => {
+    socket.on("read-message", async (obj) => {
         // Get the FormData from obj.data
         const formDataParts = obj._parts;
         // Initialize variables for message details
@@ -149,6 +147,81 @@ io.on("connection", (socket) => {
         io.to(roomId).emit("message", message);
     });
 
+    socket.on("unread-messages", async (obj) => {
+        // Get the FormData from obj.data
+        const formDataParts = obj._parts;
+        // Initialize variables for message details
+        let senderId, roomId, recepientId, messageType, messageText = null;
+        let imgUrl = "false";
+        // Iterate over the entries of the FormData parts using for...of loop
+        for (const [key, value] of formDataParts) {
+            if (key === "senderId") {
+                senderId = value;
+            } else if (key === "recepientId") {
+                recepientId = value;
+            }
+            else if (key === "roomId") {
+                roomId = value;
+            } else if (key === "messageType") {
+                messageType = value;
+            } else if (key === "messageText") {
+                messageText = value;
+            } else if (key === "imageFile") {
+                // Process image file (if present)
+                // You can use logic to compress and upload the image here
+                // For example:
+                const binaryData = Buffer.from(value.uri, 'base64');
+                // const imageBuffer = value._data;
+
+                // Process the image buffer using sharp
+                const compressedImageBuffer = await sharp(binaryData)
+                    .resize({ width: 400 })
+                    .jpeg({ quality: 40 })
+                    .toBuffer();
+
+                // Upload the compressed image to S3
+                const result = await s3Upload({ buffer: compressedImageBuffer, originalname: value.name });
+                imgUrl = result.Location;
+            }
+        }
+        // Create and save the new message
+        const newMessage = new UnseenMessage({ senderId, recepientId, messageType, message: messageText, timeStamp: new Date(), imageUrl: imgUrl });
+        await newMessage.save();
+        const message = { _id: 'unknown', senderId: { _id: senderId, name: 'xxx' }, recepientId, messageType, message: messageText, timeStamp: new Date(), imageUrl: imgUrl };
+        
+        // Emit the chat message to the recipient
+        io.to(roomId).emit("message", message);
+    });
+
+    socket.on("user-left-window",({userId,recepientId})=>
+    {
+        windowLeft[userId]=false;
+        io.to(recepientId).emit("user-joined", false); // Emitting to recepientId
+    });
+
+    socket.on("user-joined-window",({userId,recepientId})=>
+    {
+        windowLeft[userId]=true;
+        io.to(recepientId).emit("user-joined", true); // Emitting to recepientId
+    });
+
+    socket.on("check-joined", ({ userId,roomId }) => {
+        const roomSockets = io.sockets.adapter.rooms.get(roomId);
+        if (roomSockets.size === 1 || !windowLeft[userId])
+            socket.emit("user-joined", false);
+        else
+            socket.emit("user-joined", true);
+    });
+
+    socket.on("send-unread-message-count", (userId) => {
+
+        if (userId) {
+            io.to(userId).emit("unread-message-count");
+        } else {
+            console.log("User is not online"); // Handle the case where the user is not online
+        }
+    });
+
     socket.on("disconnect", async () => {
         let userId = null;
         onlineUsers.forEach((user) => {
@@ -157,18 +230,16 @@ io.on("connection", (socket) => {
                 return;
             }
         });
-        
+
         if (userId) {
             // update last seen of disconneted user
-            await User.updateOne({ _id: userId }, { $set: { lastSeen: Date.now()}});
+            await User.updateOne({ _id: userId }, { $set: { lastSeen: Date.now() } });
         }
-        
+
         // send each rooms that user got inactive
-        let userConnectedRooms=onlineRooms[userId];
-        if(userConnectedRooms)
-        {
-            userConnectedRooms.forEach((item)=>
-            {
+        let userConnectedRooms = onlineRooms[userId];
+        if (userConnectedRooms) {
+            userConnectedRooms.forEach((item) => {
                 socket.to(item[1]).emit("online", false);
             });
 
@@ -177,13 +248,14 @@ io.on("connection", (socket) => {
         }
         // remove user from active users
         onlineUsers = onlineUsers.filter((user) => user.socketId !== socket.id);
-        
+
         console.log("User Disconnected", socket.id);
     });
 });
 
 const User = require('./models/user');
 const Message = require('./models/message');
+const UnseenMessage = require('./models/unseenMessage');
 
 // endpoint for the registration of user
 app.post('/register', (req, res) => {
@@ -268,17 +340,14 @@ app.get('/users/:userId', async (req, res) => {
 });
 
 // get last seen time of a user
-app.get('/last-seen/:userId',async(req,res)=>
-{
-    try
-    {
+app.get('/last-seen/:userId', async (req, res) => {
+    try {
         const loggedInUserId = req.params.userId;
-        const user=await User.findOne({_id:loggedInUserId});
-        res.status(200).json({lastSeen:user.lastSeen});
+        const user = await User.findOne({ _id: loggedInUserId });
+        res.status(200).json({ lastSeen: user.lastSeen });
     }
-    catch(err)
-    {
-        console.log("Error getting last seen time",err);
+    catch (err) {
+        console.log("Error getting last seen time", err);
         res.status(500).json({ message: "Error getting last seen time" });
     }
 });
@@ -411,16 +480,39 @@ app.get('/user/:userId', async (req, res) => {
 app.get("/messages/:senderId/:recepientId", async (req, res) => {
     try {
         const { senderId, recepientId } = req.params;
-        const messages = await Message.find({
+
+        // Find and populate messages from the Message collection
+        const readMessages = await Message.find({
             $or: [
                 { senderId: senderId, recepientId: recepientId },
-                { senderId: recepientId, recepientId: senderId }]
+                { senderId: recepientId, recepientId: senderId }
+            ]
         }).populate("senderId", "_id name");
-        res.status(200).json(messages);
+
+        // Find unread messages from UnseenMessage collection
+        const unreadMessages = await UnseenMessage.find({
+            senderId: senderId,
+            recepientId: recepientId
+        }).populate("senderId", "_id name");
+
+        // Merge read and unread messages into a single array
+        let combinedMessages = [...readMessages, ...unreadMessages.map(message => ({
+            senderId: message.senderId,
+            recepientId: message.recepientId,
+            messageType: message.messageType,
+            message: message.message,
+            timeStamp: message.timeStamp,
+            imageUrl: message.imageUrl
+        }))];
+
+        // Sort combined messages based on timeStamp
+        combinedMessages.sort((a, b) => new Date(a.timeStamp) - new Date(b.timeStamp));
+
+        res.status(200).json({ messages: combinedMessages });
     }
     catch (error) {
         console.log(error);
-        res.status(500).json({ message: "Internal server error" });
+        res.status(500).json({ messages: "Internal server error" });
     }
 });
 
@@ -458,3 +550,65 @@ app.get("/last-message/:senderId/:recepientId", async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 })
+
+
+app.get("/unread-message-count/:senderId/:recepientId", async (req, res) => {
+    try {
+        const { senderId, recepientId } = req.params;
+        const messagesCount = await UnseenMessage.countDocuments({ senderId: recepientId, recepientId: senderId });
+        console.log(messagesCount)
+        res.status(200).json({ message: messagesCount });
+    }
+    catch (error) {
+        console.log(error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
+app.get("/unread-last-message/:senderId/:recepientId", async (req, res) => {
+    try {
+        const { senderId, recepientId } = req.params;
+        const messages = await UnseenMessage.find({
+            $or: [{ senderId: recepientId, recepientId: senderId }]
+        }).sort({ timeStamp: -1 }) // Sort by timestamp in descending order
+            .limit(1); // Limit to only the most recent message
+        res.status(200).json({ messages: messages[0] });
+    }
+    catch (error) {
+        console.log(error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});
+
+app.get("/mark-unread-messages/:senderId/:recepientId", async (req, res) => {
+    try {
+        const { senderId, recepientId } = req.params;
+        const messages = await UnseenMessage.find({
+            $or: [{ senderId: recepientId, recepientId: senderId }]
+        });
+        if (messages.length > 0) {
+            // Map messages to a format suitable for insertion
+            const messagesToInsert = messages.map(message => ({
+                senderId: message.senderId,
+                recepientId: message.recepientId,
+                messageType: message.messageType,
+                message: message.message,
+                timeStamp: message.timeStamp,
+                imageUrl: message.imageUrl
+            }));
+
+            // Insert all messages in one go
+            await Message.insertMany(messagesToInsert);
+
+            // Delete the messages from UnseenMessage collection
+            await UnseenMessage.deleteMany({
+                $or: [{ senderId: recepientId, recepientId: senderId }]
+            });
+        }
+        res.status(200).json({ messages: "Message marked successfully" });
+    }
+    catch (error) {
+        console.log(error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+});

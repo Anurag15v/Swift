@@ -22,7 +22,7 @@ const StackNavigator=()=>
                 <Stack.Screen name="Friends" component={FriendsScreen}/>
                 <Stack.Screen name="Chats" component={ChatScreen}/>
                 <Stack.Screen name="Messages" component={ChatMessagesScreen}/>
-                <Stack.Screen name="SingleChatProfile" component={SingleChatProfile}/>
+                <Stack.Screen name="SingleChatProfile" component={SingleChatProfile} options={{headerShown:false}}/>
             </Stack.Navigator>
         </NavigationContainer>
     );

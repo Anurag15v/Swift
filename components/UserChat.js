@@ -11,12 +11,13 @@ const UserChat = ({ item }) => {
   const { userId, setUserId } = useContext(UserType);
   const [message, setMessage] = useState({});
   const [isTyping, setIsTyping] = useState(false);
+  const [messageCount,setMessageCount]=useState(0);
 
-  const fetchMessages = async () => {
+  const fetchLastReadMessages = async () => {
     try {
-      const res = await fetch(`http://10.145.192.186:8000/last-message/${userId}/${item._id}`);
-      const data = await res.json();
+      const res = await fetch(`http://10.145.171.195:8000/last-message/${userId}/${item._id}`);
       if (res.ok) {
+        const data = await res.json();
         if (data.messages)
           setMessage(data.messages);
         else
@@ -27,8 +28,47 @@ const UserChat = ({ item }) => {
       console.log("Error in fetching messages", error);
     }
   }
+
+  const fetchLastUnreadMessages = async () => {
+    try {
+      const res = await fetch(`http://10.145.171.195:8000/unread-last-message/${userId}/${item._id}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.messages)
+          setMessage(data.messages);
+      }
+    }
+    catch (error) {
+      console.log("Error in fetching messages", error);
+    }
+  }
+
+  const fetchUnreadMessagesCount=async()=>
+  {
+    try{
+      const res=await fetch(`http://10.145.171.195:8000/unread-message-count/${userId}/${item._id}`);
+      if(res.ok)
+      {
+        const data=await res.json();
+        if(data.message)
+        {
+          console.log(data)
+          setMessageCount(data.message);
+        }
+      }
+    }
+    catch(error)
+    {
+      console.log("Error in fetching unread messages count",error);
+    }
+  }
+
   useEffect(() => {
-    fetchMessages();
+    fetchUnreadMessagesCount();
+    if(messageCount===0)
+      fetchLastReadMessages();
+    else
+      fetchLastUnreadMessages();
   }, [])
   useEffect(() => {
 
@@ -42,12 +82,17 @@ const UserChat = ({ item }) => {
       setIsTyping(false);
     });
 
+    // Add listener for unread message count
+    socket.on("unread-message-count",()=>{
+      setMessageCount(messageCount+1);
+    });
+
     return () => {
       socket.off("typing");
       socket.off("stop-typing");
     }
 
-  }, [userId, item]);
+  }, [userId, item, messageCount]);
 
   const formatTime = (time) => {
     const options = { hour: "numeric", minute: "numeric" };
@@ -55,7 +100,12 @@ const UserChat = ({ item }) => {
   }
   
   return (
-    <Pressable onPress={() => navigation.navigate("Messages", { recepientId: item._id })} style={styles.container}>
+    <Pressable 
+        onPress={() => {
+          setMessageCount(0);
+          navigation.navigate("Messages", { recepientId: item._id });
+          }
+        } style={styles.container}>
       <View>
         <Image style={styles.image} source={{ uri: item.image }} />
       </View>
@@ -87,6 +137,9 @@ const UserChat = ({ item }) => {
               <Text style={styles.lastMsgText}>Photo</Text>
             </View>}
       </View>
+      {messageCount!==0 &&  <View style={styles.unreadMessageBox}>
+        <Text style={styles.unreadCount}>{messageCount}</Text>
+      </View> }
       <View>
         {message?.timeStamp &&
           <Text style={styles.timeStamp}>{formatTime(message.timeStamp)}</Text>}
@@ -140,5 +193,18 @@ const styles = StyleSheet.create({
     height:30,
     borderRadius:6,
     marginLeft:10
-}
+  },
+  unreadMessageBox:
+  {
+    width:20,
+    height:20,
+    borderRadius:10,
+    backgroundColor:'#c21408',
+    paddingTop:1.5
+  },
+  unreadCount:{
+    color:'white',
+    textAlign:'center',
+    fontWeight:'500'
+  }
 })

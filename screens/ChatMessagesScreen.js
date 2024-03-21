@@ -38,9 +38,11 @@ const ChatMessagesScreen = () => {
     const [recordingStatus, setRecordingStatus] = useState("idle");
     const [audioPermission, setAudioPermission] = useState(null);
     const [recordedAudio, setRecordedAudio] = useState(null);
-
+    const [otherUserStatus, setOtherUserStatus] = useState(false);
 
     useEffect(() => {
+
+        socket.emit("user-joined-window",{userId,recepientId});
         // Add listener for incoming messages
         socket.on("message", (receivedMessage) => {
             // Handle incoming message here
@@ -58,23 +60,53 @@ const ChatMessagesScreen = () => {
             setIsTyping(false);
         });
 
+        // Add listener to get other user status
+        socket.on("user-joined", (status) => {
+            setOtherUserStatus(status);
+        });
+        return ()=>
+        {
+            socket.off("user-joined");
+            socket.off("user-joined-window");
+        }
+
     }, [userId]);
 
     const fetchMessages = async () => {
         try {
-            const res = await fetch(`http://10.145.192.186:8000/messages/${userId}/${recepientId}`);
+            const res = await fetch(`http://10.145.171.195:8000/messages/${userId}/${recepientId}`);
             const data = await res.json();
             if (res.ok) {
-                setMessages(data);
-                socket.emit("join-chat", { room: combinedId(), senderId: userId, recepientId });
+                setMessages(data.messages);
+                // socket.emit("join-chat", { room: combinedId(), senderId: userId, recepientId });
             }
         }
         catch (error) {
             console.log("Error in fetching messages", error);
         }
     }
+
+    const fetchMessagesAndMarkRead=async()=>
+    {
+        try {
+            const res=await fetch(`http://10.145.171.195:8000/mark-unread-messages/${userId}/${recepientId}`);
+            if(res.ok)
+            {
+                const res2 = await fetch(`http://10.145.171.195:8000/messages/${userId}/${recepientId}`);
+                const data = await res2.json();
+                if (res2.ok) {
+                    setMessages(data.messages);
+                    socket.emit("join-chat", { room: combinedId(), senderId: userId, recepientId });
+                }
+            }
+        }
+        catch (error) {
+            console.log("Error in marking messages read", error);
+        }
+    }
+
     useEffect(() => {
-        fetchMessages();
+        fetchMessagesAndMarkRead();
     }, []);
 
     useEffect(() => {
@@ -85,7 +117,7 @@ const ChatMessagesScreen = () => {
         socket.on("online", (status) => {
             setOnline(status);
             if (!status) {
-                fetch(`http://10.145.192.186:8000/last-seen/${recepientId}`)
+                fetch(`http://10.145.171.195:8000/last-seen/${recepientId}`)
                     .then(res => {
                         if (res.ok) {
                             return res.json();
@@ -167,7 +199,7 @@ const ChatMessagesScreen = () => {
     useEffect(() => {
         const fetchRecepientsData = async () => {
             try {
-                const res = await fetch(`http://10.145.192.186:8000/user/${recepientId}`);
+                const res = await fetch(`http://10.145.171.195:8000/user/${recepientId}`);
                 const data = await res.json();
                 setRecepientData(data);
             }
@@ -177,6 +209,12 @@ const ChatMessagesScreen = () => {
         }
         fetchRecepientsData();
     }, [])
+    const checkRecepientIsJoined=()=>
+    {
+        socket.emit("check-joined",{userId:recepientId,roomId:combinedId()});
+        return true;
+    }
+
     const handleSend = async (messageType, imageBase64) => {
         try {
             const formData = new FormData();
@@ -202,7 +240,18 @@ const ChatMessagesScreen = () => {
             formData.append("roomId", combinedId());
 
             // Emit the message with form data to the backend via socket
-            socket.emit("message", formData);
+            
+            // check if other user is not joined the room
+            checkRecepientIsJoined();
+            if (otherUserStatus===false)
+            {
+                socket.emit("unread-messages", formData);
+                socket.emit("send-unread-message-count", recepientId);
+            }
+            else
+            {
+                socket.emit("read-message", formData);
+            }
             socket.emit("stop-typing", combinedId());
             // Clear message input and selected image
             setMessage("");
@@ -239,7 +288,7 @@ const ChatMessagesScreen = () => {
                             <Text style={{ fontSize: 16, fontWeight: '500' }}>{selectedMessages.length}</Text>
                         </View>
                     ) : (
-                        <TouchableOpacity onPress={() => navigation.navigate("SingleChatProfile")}>
+                        <TouchableOpacity onPress={() => navigation.navigate("SingleChatProfile",{ recepientId })}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <Image style={{
                                     width: 30,
@@ -277,7 +326,7 @@ const ChatMessagesScreen = () => {
     }, [recepientData, selectedMessages, online, lastSeenTime]);
     const deleteMessages = async (messageIds) => {
         try {
-            const res = await fetch('http://10.145.192.186:8000/delete-messages/', {
+            const res = await fetch('http://10.145.171.195:8000/delete-messages/', {
                 method: 'POST',
                 headers:
                 {
@@ -353,27 +402,23 @@ const ChatMessagesScreen = () => {
         setShowModal(true);
         setImageUri(imageUrl);
     }
-    useEffect(()=>
-    {
-        const backAction=()=>
-        {
-            if(showModal)
-            {
+    useEffect(() => {
+        const backAction = () => {
+            if (showModal) {
                 setShowModal(false);
                 setImageUri("");
                 return true;
             }
-            else
-            {
+            else {
+                socket.emit("user-left-window",{userId,recepientId});
                 return false;
             }
         }
-        const backHandler=BackHandler.addEventListener('hardwareBackPress',backAction);
-        return ()=>
-        {
-            backHandler.remove();            
+        const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
+        return () => {
+            backHandler.remove();
         }
-    },[showModal]);
+    }, [showModal]);
 
     async function startRecording() {
         setIsRecording(true);
@@ -421,8 +466,6 @@ const ChatMessagesScreen = () => {
                 console.log("Stopping Recording");
                 await recording.stopAndUnloadAsync();
                 const uri = recording.getURI();
-
-                console.log(uri);
                 setRecordedAudio({
                     uri,
                     name: `recording-${Date.now()}.m4a`, // Change the file extension to .m4a
