@@ -1,6 +1,6 @@
 import { useNavigation } from '@react-navigation/native';
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, TextInput, Pressable } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, TextInput, Pressable, ToastAndroid } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import socket from '../socket';
@@ -35,6 +35,10 @@ const LoginScreen = () => {
         checkLoginStatus();
     }, []);
     const handleLogin = () => {
+        if (!email || !password) {
+            ToastAndroid.show('Please enter all the fields', ToastAndroid.SHORT);
+            return;
+        }
         const user = {
             email,
             password
@@ -48,10 +52,11 @@ const LoginScreen = () => {
             socket.emit("setup", {
                 _id: userId
             });
+            ToastAndroid.show('Logged In', ToastAndroid.SHORT);
             navigation.replace("Home");
 
         }).catch((err) => {
-            Alert.alert("Login error", "Invalid email or password");
+            ToastAndroid.show('Invalid email or password', ToastAndroid.SHORT);
             console.log("Login error", err);
         });
     }

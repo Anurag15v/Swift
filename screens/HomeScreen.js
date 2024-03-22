@@ -1,4 +1,4 @@
-import { AppState, BackHandler, StyleSheet, Text, View } from 'react-native'
+import { AppState, BackHandler, StyleSheet, Text, ToastAndroid, View } from 'react-native'
 import React, { useContext, useEffect, useLayoutEffect, useState } from 'react'
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,7 +11,6 @@ import axios from 'axios';
 import User from '../components/User';
 import socket from '../socket';
 
-
 global.atob = decode;
 
 const HomeScreen = () => {
@@ -20,6 +19,13 @@ const HomeScreen = () => {
   const { userId, setUserId } = useContext(UserType);
   const [users,setUsers]=useState([]);
   const [appState, setAppState] = useState(AppState.currentState);
+  
+  const handleLogOut=async()=>
+  {
+    await AsyncStorage.removeItem("authToken");
+    ToastAndroid.show('Logged Out', ToastAndroid.SHORT);
+    navigation.replace("Login");
+  }
   useLayoutEffect(() => {
     navigation.setOptions({
       headerTitle: "",
@@ -30,6 +36,7 @@ const HomeScreen = () => {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Ionicons onPress={()=>navigation.navigate("Chats")} name="chatbox-ellipses-outline" size={24} color="black" />
           <MaterialIcons onPress={()=>navigation.navigate("Friends")} name="people-outline" size={24} color="black" />
+          <MaterialIcons onPress={handleLogOut} name="logout" size={24} color="black" />
         </View>
       )
     })

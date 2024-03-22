@@ -258,10 +258,18 @@ const Message = require('./models/message');
 const UnseenMessage = require('./models/unseenMessage');
 
 // endpoint for the registration of user
-app.post('/register', (req, res) => {
+app.post('/register', async(req, res) => {
     const { name, email, password, image } = req.body;
+    
     //create new user request
-    const newUser = new User({ name, email, password, image });
+    const binaryData = Buffer.from(image, 'base64');
+    
+    // Upload the compressed image to S3
+    const result = await s3Upload({ buffer: binaryData, originalname: name+".jpeg" });
+    
+    console.log(result.Location);
+
+    const newUser = new User({ name, email, password, image:result.Location });
 
     // save the user to database
     newUser.save().then(() => {

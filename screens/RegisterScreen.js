@@ -1,38 +1,69 @@
 import { useNavigation } from '@react-navigation/native';
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, TextInput, Pressable,Alert } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, TextInput, Pressable,Alert,Image, ToastAndroid } from 'react-native';
 import axios from 'axios';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as FileSystem from 'expo-file-system';
 
 const RegisterScreen = () => {
     const [email, setEmail] = useState("");
     const [name, setName] = useState("");
     const [password, setPassword] = useState("");
     const [image, setImage] = useState("");
+    const [imageUri,setImageUri]=useState("");
     const navigation = useNavigation();
-    const handleRegister=()=>
-    {
-        const user={
-            email:email,
-            name:name,
-            password:password,
-            image:image
+    const handleRegister = () => {
+        if (!email || !name || !password || !image) {
+            ToastAndroid.show('Please enter all the fields', ToastAndroid.SHORT);
+            return;
         }
-        // send post request to the backend API to register the user
+    
+        const user = {
+            email: email,
+            name: name,
+            password: password,
+            image: image
+        };
         
-        axios.post("http://10.145.171.195:8000/register",user).then((res)=>
-        {
-            Alert.alert("Registeration Successful","You have been registered successfully");
-            setName("");
-            setEmail("");
-            setPassword("");
-            setImage("");
-        }).catch((err)=>
-        {
-            Alert.alert("Registration Error","An error occured while registering");
-            console.log(err);
-        });
-        
+        axios.post("http://10.145.171.195:8000/register", user)
+            .then((res) => {
+                ToastAndroid.show('Registration Successful', ToastAndroid.SHORT);
+                setName("");
+                setEmail("");
+                setPassword("");
+                setImage("");
+                setImageUri("");
+                navigation.navigate("Login");
+            })
+            .catch((err) => {
+                ToastAndroid.show('Registration Error', ToastAndroid.SHORT);
+                console.log(err);
+            });
     };
+    const pickImage = async () => {
+        // No permissions request is necessary for launching the image library
+        let result = await ImagePicker.launchImageLibraryAsync({
+            base64: true,
+            allowsEditing: true,
+            aspect: [4, 4],
+            quality: 1,
+        });
+        if (!result.canceled) {
+            // Compress the image
+            const compressedImage = await ImageManipulator.manipulateAsync(
+                result.assets[0].uri,
+                [{ resize: { width: 400 } }],
+                { compress: 0.5, format: ImageManipulator.SaveFormat.JPEG }
+            );
+            // Convert the image URI to a base64 string
+            const base64Image = await FileSystem.readAsStringAsync(compressedImage.uri, {
+                encoding: FileSystem.EncodingType.Base64,
+            });
+            setImageUri(result.assets[0].uri);
+            setImage(base64Image);
+        }
+    }
     return (
         <View style={styles.container}>
             <KeyboardAvoidingView>
@@ -41,6 +72,10 @@ const RegisterScreen = () => {
                     <Text style={styles.subHeader}>Register to Your Account</Text>
                 </View>
                 <View style={styles.formView}>
+                    <Pressable onPress={pickImage} style={{ alignItems:'center' }}>
+                        {image===""?<Image style={{height:100,width:100,borderRadius:50}} source={require('../assets/avatar.png')}/>
+                        :<Image style={{height:100,width:100,borderRadius:50,resizeMode:'contain'}} source={{uri:imageUri}}/>}
+                    </Pressable>
                     <View>
                         <Text style={styles.text}>Name</Text>
 
@@ -71,16 +106,6 @@ const RegisterScreen = () => {
                             style={styles.textInput}
                             placeholderTextColor={'black'}
                             placeholder='Enter your password' />
-                    </View>
-                    <View style={{ marginTop: 10 }}>
-                        <Text style={styles.text}>Image</Text>
-
-                        <TextInput
-                            value={image}
-                            onChangeText={(text) => setImage(text)}
-                            style={styles.textInput}
-                            placeholderTextColor={'black'}
-                            placeholder='Enter profile image link' />
                     </View>
                     <Pressable onPress={handleRegister} style={styles.btn}>
                         <Text style={styles.btnText}>Register</Text>
@@ -117,7 +142,7 @@ const styles = StyleSheet.create({
         marginTop: 15
     },
     formView: {
-        marginTop: 50
+        marginTop: 10
     },
     textInput: {
         borderBottomColor: 'gray',
