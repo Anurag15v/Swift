@@ -11,11 +11,11 @@ const UserChat = ({ item }) => {
   const { userId, setUserId } = useContext(UserType);
   const [message, setMessage] = useState({});
   const [isTyping, setIsTyping] = useState(false);
-  const [messageCount,setMessageCount]=useState(0);
+  const [messageCount, setMessageCount] = useState(0);
 
   const fetchLastReadMessages = async () => {
     try {
-      const res = await fetch(`http://10.145.171.195:8000/last-message/${userId}/${item._id}`);
+      const res = await fetch(`http://10.145.206.139:8000/last-message/${userId}/${item._id}`);
       if (res.ok) {
         const data = await res.json();
         if (data.messages)
@@ -31,7 +31,7 @@ const UserChat = ({ item }) => {
 
   const fetchLastUnreadMessages = async () => {
     try {
-      const res = await fetch(`http://10.145.171.195:8000/unread-last-message/${userId}/${item._id}`);
+      const res = await fetch(`http://10.145.206.139:8000/unread-last-message/${userId}/${item._id}`);
       if (res.ok) {
         const data = await res.json();
         if (data.messages)
@@ -43,29 +43,25 @@ const UserChat = ({ item }) => {
     }
   }
 
-  const fetchUnreadMessagesCount=async()=>
-  {
-    try{
-      const res=await fetch(`http://10.145.171.195:8000/unread-message-count/${userId}/${item._id}`);
-      if(res.ok)
-      {
-        const data=await res.json();
-        if(data.message)
-        {
+  const fetchUnreadMessagesCount = async () => {
+    try {
+      const res = await fetch(`http://10.145.206.139:8000/unread-message-count/${userId}/${item._id}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.message) {
           console.log(data)
           setMessageCount(data.message);
         }
       }
     }
-    catch(error)
-    {
-      console.log("Error in fetching unread messages count",error);
+    catch (error) {
+      console.log("Error in fetching unread messages count", error);
     }
   }
 
   useEffect(() => {
     fetchUnreadMessagesCount();
-    if(messageCount===0)
+    if (messageCount === 0)
       fetchLastReadMessages();
     else
       fetchLastUnreadMessages();
@@ -83,8 +79,8 @@ const UserChat = ({ item }) => {
     });
 
     // Add listener for unread message count
-    socket.on("unread-message-count",()=>{
-      setMessageCount(messageCount+1);
+    socket.on("unread-message-count", () => {
+      setMessageCount(messageCount + 1);
     });
 
     return () => {
@@ -98,14 +94,14 @@ const UserChat = ({ item }) => {
     const options = { hour: "numeric", minute: "numeric" };
     return new Date(time).toLocaleString("en-US", options);
   }
-  
+
   return (
-    <Pressable 
-        onPress={() => {
-          setMessageCount(0);
-          navigation.navigate("Messages", { recepientId: item._id });
-          }
-        } style={styles.container}>
+    <Pressable
+      onPress={() => {
+        setMessageCount(0);
+        navigation.navigate("Messages", { recepientId: item._id });
+      }
+      } style={styles.container}>
       <View>
         <Image style={styles.image} source={{ uri: item.image }} />
       </View>
@@ -114,10 +110,11 @@ const UserChat = ({ item }) => {
           {item?.name}
         </Text>
         {isTyping ?
-            <View style={styles.typingView}>
-              <Text>
+          <View style={styles.typingView}>
+            <Text>
               Typing
-              </Text><LottieView
+            </Text>
+            <LottieView
               autoPlay
               // ref={animation}
               style={{
@@ -126,7 +123,7 @@ const UserChat = ({ item }) => {
                 backgroundColor: 'rgb(242,242,242)',
               }}
               // Find more Lottie files at https://lottiefiles.com/featured
-              source={require('../assets/Animation - 1710593470490.json')}
+              source={require('../assets/typing.json')}
             /></View>
           :
           message?.messageType === "text" ?
@@ -137,9 +134,9 @@ const UserChat = ({ item }) => {
               <Text style={styles.lastMsgText}>Photo</Text>
             </View>}
       </View>
-      {messageCount!==0 &&  <View style={styles.unreadMessageBox}>
+      {messageCount !== 0 && <View style={styles.unreadMessageBox}>
         <Text style={styles.unreadCount}>{messageCount}</Text>
-      </View> }
+      </View>}
       <View>
         {message?.timeStamp &&
           <Text style={styles.timeStamp}>{formatTime(message.timeStamp)}</Text>}
@@ -186,25 +183,25 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: 'gray'
   },
-  typingView:{
-    flexDirection:'row',
-    alignItems:'center',
-    width:100,
-    height:30,
-    borderRadius:6,
-    marginLeft:10
+  typingView: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    width: 100,
+    height: 30,
+    borderRadius: 6,
+    marginLeft: 10
   },
   unreadMessageBox:
   {
-    width:20,
-    height:20,
-    borderRadius:10,
-    backgroundColor:'#c21408',
-    paddingTop:1.5
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#c21408',
+    paddingTop: 1.5
   },
-  unreadCount:{
-    color:'white',
-    textAlign:'center',
-    fontWeight:'500'
+  unreadCount: {
+    color: 'white',
+    textAlign: 'center',
+    fontWeight: '500'
   }
 })

@@ -43,7 +43,7 @@ const LoginScreen = () => {
             email,
             password
         };
-        axios.post(`http://10.145.171.195:8000/login`, user).then((res) => {
+        axios.post(`http://10.145.206.139:8000/login`, user).then((res) => {
             const token = res.data.token;
             AsyncStorage.setItem("authToken", token);
             socket.connect();
@@ -72,6 +72,7 @@ const LoginScreen = () => {
                         <Text style={styles.text}>Email</Text>
 
                         <TextInput
+                            autoCapitalize='none'
                             value={email}
                             onChangeText={(text) => setEmail(text)}
                             style={styles.textInput}

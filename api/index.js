@@ -267,8 +267,6 @@ app.post('/register', async(req, res) => {
     // Upload the compressed image to S3
     const result = await s3Upload({ buffer: binaryData, originalname: name+".jpeg" });
     
-    console.log(result.Location);
-
     const newUser = new User({ name, email, password, image:result.Location });
 
     // save the user to database
@@ -311,6 +309,18 @@ app.post('/login', (req, res) => {
         console.log("Error in finding the user", err);
         res.status(500).json({ message: "Internal server error" });
     });
+});
+
+// endpoint to access single user based on user Id
+app.get('/user/:userId', async (req, res) => {
+    try {
+        const userId = req.params.userId;
+        const user = await User.findOne({ _id:  userId});
+        res.status(200).json(user);
+    } catch (error) {
+        console.log("Error retrieving user", error);
+        res.status(500).json({ message: "Error retrieving user" });
+    }
 });
 
 // endpoint to access all the users except current logged in user

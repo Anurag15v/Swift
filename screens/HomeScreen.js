@@ -1,4 +1,4 @@
-import { AppState, BackHandler, StyleSheet, Text, ToastAndroid, View } from 'react-native'
+import { AppState, BackHandler, Image, Pressable, StyleSheet, Text, ToastAndroid, View } from 'react-native'
 import React, { useContext, useEffect, useLayoutEffect, useState } from 'react'
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,13 +19,32 @@ const HomeScreen = () => {
   const { userId, setUserId } = useContext(UserType);
   const [users,setUsers]=useState([]);
   const [appState, setAppState] = useState(AppState.currentState);
-  
+  const [currentUser,setCurrentUser]=useState({});
   const handleLogOut=async()=>
   {
     await AsyncStorage.removeItem("authToken");
     ToastAndroid.show('Logged Out', ToastAndroid.SHORT);
     navigation.replace("Login");
   }
+  useEffect(()=>
+  {
+      const getCurrentUser=async()=>
+      {
+        const token=await AsyncStorage.getItem("authToken");
+        const decodedToken = jwtDecode(token);
+        const userId=decodedToken.userId;
+        setUserId(userId);
+        axios.get(`http://10.145.206.139:8000/user/${userId}`).then((res)=>
+        {
+          setCurrentUser(res.data);
+        }).catch(err=>
+        {
+          console.log("Error retrieving users",err);
+        });
+      }
+      getCurrentUser();
+
+  },[]);
   useLayoutEffect(() => {
     navigation.setOptions({
       headerTitle: "",
@@ -36,20 +55,19 @@ const HomeScreen = () => {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <Ionicons onPress={()=>navigation.navigate("Chats")} name="chatbox-ellipses-outline" size={24} color="black" />
           <MaterialIcons onPress={()=>navigation.navigate("Friends")} name="people-outline" size={24} color="black" />
+          <Pressable onPress={()=>navigation.navigate("Profile",{data:currentUser})}>
+          <Image style={{height:35,width:35,borderRadius:50}} source={{uri:currentUser.image}}/>
+          </Pressable>
           <MaterialIcons onPress={handleLogOut} name="logout" size={24} color="black" />
         </View>
       )
     })
-  }, []);
+  }, [currentUser]);
   useEffect(()=>
   {
     const fetchUsers=async()=>
     {
-      const token=await AsyncStorage.getItem("authToken");
-      const decodedToken = jwtDecode(token);
-      const userId=decodedToken.userId;
-      setUserId(userId);
-      axios.get(`http://10.145.171.195:8000/users/${userId}`).then((res)=>
+      axios.get(`http://10.145.206.139:8000/users/${userId}`).then((res)=>
       {
         setUsers(res.data);
       }).catch(err=>
@@ -58,7 +76,7 @@ const HomeScreen = () => {
       });
     }
     fetchUsers();
-  },[]);
+  },[ currentUser]);
   
   useEffect(() => {
     const handleAppStateChange = (nextAppState) => {

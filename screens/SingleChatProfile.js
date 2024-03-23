@@ -13,7 +13,7 @@ const SingleChatProfile = () => {
 
   useEffect(() => {
     const getUserDetails = async () => {
-      const res = await fetch(`http://10.145.171.195:8000/user/${recepientId}`);
+      const res = await fetch(`http://10.145.206.139:8000/user/${recepientId}`);
       const data = await res.json();
       setUserData(data);
     };

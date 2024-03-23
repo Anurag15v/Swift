@@ -1,33 +1,36 @@
 import { useNavigation } from '@react-navigation/native';
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, KeyboardAvoidingView, TextInput, Pressable,Alert,Image, ToastAndroid } from 'react-native';
+import { View, Text, StyleSheet, KeyboardAvoidingView, TextInput, Pressable, Alert, Image, ToastAndroid } from 'react-native';
 import axios from 'axios';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
+import LottieView from 'lottie-react-native';
 
 const RegisterScreen = () => {
     const [email, setEmail] = useState("");
     const [name, setName] = useState("");
     const [password, setPassword] = useState("");
     const [image, setImage] = useState("");
-    const [imageUri,setImageUri]=useState("");
+    const [imageUri, setImageUri] = useState("");
     const navigation = useNavigation();
+    const [loading, setLoading] = useState(false);
     const handleRegister = () => {
         if (!email || !name || !password || !image) {
             ToastAndroid.show('Please enter all the fields', ToastAndroid.SHORT);
             return;
         }
-    
+
         const user = {
             email: email,
             name: name,
             password: password,
             image: image
         };
-        
-        axios.post("http://10.145.171.195:8000/register", user)
+        setLoading(true);
+        axios.post("http://10.145.206.139:8000/register", user)
             .then((res) => {
+                setLoading(false);
                 ToastAndroid.show('Registration Successful', ToastAndroid.SHORT);
                 setName("");
                 setEmail("");
@@ -72,9 +75,9 @@ const RegisterScreen = () => {
                     <Text style={styles.subHeader}>Register to Your Account</Text>
                 </View>
                 <View style={styles.formView}>
-                    <Pressable onPress={pickImage} style={{ alignItems:'center' }}>
-                        {image===""?<Image style={{height:100,width:100,borderRadius:50}} source={require('../assets/avatar.png')}/>
-                        :<Image style={{height:100,width:100,borderRadius:50,resizeMode:'contain'}} source={{uri:imageUri}}/>}
+                    <Pressable onPress={pickImage} style={{ alignItems: 'center' }}>
+                        {image === "" ? <Image style={{ height: 100, width: 100, borderRadius: 50 }} source={require('../assets/avatar.png')} />
+                            : <Image style={{ height: 100, width: 100, borderRadius: 50, resizeMode: 'contain' }} source={{ uri: imageUri }} />}
                     </Pressable>
                     <View>
                         <Text style={styles.text}>Name</Text>
@@ -90,6 +93,7 @@ const RegisterScreen = () => {
                         <Text style={styles.text}>Email</Text>
 
                         <TextInput
+                            autoCapitalize='none'
                             value={email}
                             onChangeText={(text) => setEmail(text)}
                             style={styles.textInput}
@@ -107,9 +111,22 @@ const RegisterScreen = () => {
                             placeholderTextColor={'black'}
                             placeholder='Enter your password' />
                     </View>
-                    <Pressable onPress={handleRegister} style={styles.btn}>
-                        <Text style={styles.btnText}>Register</Text>
-                    </Pressable>
+                    {loading === false ?
+                        <Pressable onPress={handleRegister} style={styles.btn}>
+                            <Text style={styles.btnText}>Register</Text>
+                        </Pressable> :
+                        <View style={{alignItems:'center'}}>
+                            <LottieView
+                                autoPlay
+                                style={{
+                                    width: 40,
+                                    height: 40,
+                                    backgroundColor: 'white',
+                                }}
+                                // Find more Lottie files at https://lottiefiles.com/featured
+                                source={require('../assets/loading.json')}
+                            />
+                        </View>}
                     <Pressable onPress={() => navigation.goBack()} style={styles.alterBtn}>
                         <Text style={styles.alterBtnText}>Already have an account? Sign In</Text>
                     </Pressable>
@@ -150,8 +167,8 @@ const styles = StyleSheet.create({
         marginVertical: 10,
         height: 40,
         width: 300,
-        fontWeight:'600',
-        fontSize:14
+        fontWeight: '600',
+        fontSize: 14
     },
     text: {
         fontSize: 18,
