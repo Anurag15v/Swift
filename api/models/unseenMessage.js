@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const unseenMessageSchema = new mongoose.Schema({
+    cid:String,
     senderId: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User"
@@ -17,7 +18,8 @@ const unseenMessageSchema = new mongoose.Schema({
     timeStamp: {
         type: Date,
         default: Date.now()
-    }
+    },
+    messageSeen:String
 });
 const UnseenMessage = mongoose.model('UnseenMessages', unseenMessageSchema);
 module.exports = UnseenMessage;

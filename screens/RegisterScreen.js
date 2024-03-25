@@ -28,7 +28,7 @@ const RegisterScreen = () => {
             image: image
         };
         setLoading(true);
-        axios.post("http://10.145.206.139:8000/register", user)
+        axios.post("http://192.168.152.216:8000/register", user)
             .then((res) => {
                 setLoading(false);
                 ToastAndroid.show('Registration Successful', ToastAndroid.SHORT);

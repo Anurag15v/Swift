@@ -1,12 +1,14 @@
 import { Pressable, StyleSheet, Text, View, Image } from 'react-native'
 import React, { useContext } from 'react'
 import { UserType } from '../UserContext';
+import socket from '../socket';
+
 
 const FriendRequest = ({ item, friendRequests, setFriendRequests }) => {
   const { userId, setUserId } = useContext(UserType);
   const acceptRequest = async (friendRequestId) => {
     try {
-      const res = await fetch('http://10.145.206.139:8000/friend-request/accept',
+      const res = await fetch('http://192.168.152.216:8000/friend-request/accept',
         {
           method: 'POST',
           headers: {
@@ -15,12 +17,12 @@ const FriendRequest = ({ item, friendRequests, setFriendRequests }) => {
           body: JSON.stringify({ recepientId: userId, senderId: friendRequestId })
         });
       if (res.ok) {
+        socket.emit("friend-request-accepted",{senderId:friendRequestId,recepientId:userId});
         setFriendRequests(friendRequests.filter((request) => request._id !== friendRequestId));
       }
     }
     catch (error) {
       console.log("Error in accepting friend request", error);
-
     }
   }
   return (

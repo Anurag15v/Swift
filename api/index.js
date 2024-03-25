@@ -45,8 +45,11 @@ const upload = multer({ storage: storage });
 
 let onlineUsers = [];
 let onlineRooms = {};
-let windowLeft={};
+let windowLeft = {};
 
+const User = require('./models/user');
+const Message = require('./models/message');
+const UnseenMessage = require('./models/unseenMessage');
 
 io.on("connection", (socket) => {
     console.log("connected to socket.io");
@@ -106,11 +109,17 @@ io.on("connection", (socket) => {
         // Get the FormData from obj.data
         const formDataParts = obj._parts;
         // Initialize variables for message details
-        let senderId, roomId, recepientId, messageType, messageText = null;
+        let senderId, roomId, recepientId, messageType, messageText, cid, timeStamp = null;
         let imgUrl = "false";
         // Iterate over the entries of the FormData parts using for...of loop
         for (const [key, value] of formDataParts) {
-            if (key === "senderId") {
+            if (key === "cid") {
+                cid = value;
+            }
+            else if (key === "timeStamp") {
+                timeStamp = value;
+            }
+            else if (key === "senderId") {
                 senderId = value;
             } else if (key === "recepientId") {
                 recepientId = value;
@@ -140,22 +149,32 @@ io.on("connection", (socket) => {
             }
         }
         // Create and save the new message
-        const newMessage = new Message({ senderId, recepientId, messageType, message: messageText, timeStamp: new Date(), imageUrl: imgUrl });
+        const newMessage = new Message({ cid, senderId, recepientId, messageType, message: messageText, timeStamp, imageUrl: imgUrl, messageSeen: "sent" });
         await newMessage.save();
-        const message = { _id: 'unknown', senderId: { _id: senderId, name: 'xxx' }, recepientId, messageType, message: messageText, timeStamp: new Date(), imageUrl: imgUrl };
-        // Emit the chat message to the recipient
-        io.to(roomId).emit("message", message);
+
+        const message = { _id: newMessage._id, cid, senderId: { _id: senderId, name: 'unknown' }, recepientId, messageType, message: messageText, timeStamp, imageUrl: imgUrl, messageSeen: "sent" };
+
+
+        // Emit the chat message to the recipient and send status to the sender
+        socket.to(roomId).emit("receive-message-status", { messageId: newMessage._id, cid, status: "sent" });
+        socket.to(roomId).emit("message", message);
     });
 
     socket.on("unread-messages", async (obj) => {
         // Get the FormData from obj.data
         const formDataParts = obj._parts;
         // Initialize variables for message details
-        let senderId, roomId, recepientId, messageType, messageText = null;
+        let senderId, roomId, recepientId, messageType, messageText, cid, timeStamp = null;
         let imgUrl = "false";
         // Iterate over the entries of the FormData parts using for...of loop
         for (const [key, value] of formDataParts) {
-            if (key === "senderId") {
+            if (key === "cid") {
+                cid = value;
+            }
+            else if (key === "timeStamp") {
+                timeStamp = value;
+            }
+            else if (key === "senderId") {
                 senderId = value;
             } else if (key === "recepientId") {
                 recepientId = value;
@@ -184,30 +203,64 @@ io.on("connection", (socket) => {
                 imgUrl = result.Location;
             }
         }
+
         // Create and save the new message
-        const newMessage = new UnseenMessage({ senderId, recepientId, messageType, message: messageText, timeStamp: new Date(), imageUrl: imgUrl });
+        const newMessage = new UnseenMessage({ cid, senderId, recepientId, messageType, message: messageText, timeStamp, imageUrl: imgUrl, messageSeen: "sent" });
         await newMessage.save();
-        const message = { _id: 'unknown', senderId: { _id: senderId, name: 'xxx' }, recepientId, messageType, message: messageText, timeStamp: new Date(), imageUrl: imgUrl };
-        
-        // Emit the chat message to the recipient
-        io.to(roomId).emit("message", message);
+
+        const message = { _id: 'unknown', cid, senderId: { _id: senderId, name: 'unknown' }, recepientId, messageType, message: messageText, timeStamp, imageUrl: imgUrl, messageSeen: "sent" };
+
+        // Emit the chat message to the recipient and send status to the sender
+        io.to(roomId).emit("receive-message-status", { messageId: "", cid, status: "sent" });
+        socket.to(roomId).emit("message", message);
     });
 
-    socket.on("user-left-window",({userId,recepientId})=>
-    {
-        windowLeft[userId]=false;
+    socket.on("send-recepient-message-status", async ({ messageId, cid, roomId, status }) => {
+        try {
+
+            // send status delivered to sender
+            socket.to(roomId).emit("receive-message-status", { messageId, cid, status });
+
+            if (messageId !== "unknown") {
+                // Update the message directly in the database
+                await Message.findOneAndUpdate(
+                    { _id: messageId }, // Filter for the message by its ID
+                    { $set: { messageSeen: "seen" } }, // Update the messageSeen field
+                    { new: true } // Return the updated document
+                );
+            }
+            else {
+                // Update the message directly in the database
+                await Message.findOneAndUpdate(
+                    { cid: cid }, // Filter for the message by its ID
+                    { $set: { messageSeen: "seen" } }, // Update the messageSeen field
+                    { new: true } // Return the updated document
+                );
+            }
+            // send status seen to sender
+            socket.to(roomId).emit("receive-message-status", { messageId, cid, status: "seen" });
+        }
+        catch (error) {
+            console.log(error, "Error in sending message status");
+        }
+    });
+
+    socket.on("user-left-window", ({ roomId, userId, recepientId }) => {
+
+        socket.leave(roomId);
+        windowLeft[userId] = false;
         io.to(recepientId).emit("user-joined", false); // Emitting to recepientId
     });
 
-    socket.on("user-joined-window",({userId,recepientId})=>
-    {
-        windowLeft[userId]=true;
+    socket.on("user-joined-window", ({ roomId, userId, recepientId }) => {
+        socket.join(roomId);
+        windowLeft[userId] = true;
         io.to(recepientId).emit("user-joined", true); // Emitting to recepientId
     });
 
-    socket.on("check-joined", ({ userId,roomId }) => {
+    socket.on("check-joined", ({ userId, roomId }) => {
         const roomSockets = io.sockets.adapter.rooms.get(roomId);
-        if (roomSockets.size === 1 || !windowLeft[userId])
+        if (roomSockets && roomSockets.size === 1 || !windowLeft[userId])
             socket.emit("user-joined", false);
         else
             socket.emit("user-joined", true);
@@ -220,6 +273,20 @@ io.on("connection", (socket) => {
         } else {
             console.log("User is not online"); // Handle the case where the user is not online
         }
+    });
+
+    socket.on("send-friend-request", async ({ senderId, recepientId }) => {
+        try {
+            const user = await User.findOne({ _id: senderId });
+            io.to(senderId).emit(`receive-friend-request-status-${recepientId}`, "pending");
+            io.to(recepientId).emit("received-friend-request", { _id: senderId, name: user.name, email: user.email, image: user.image });
+        } catch (error) {
+            console.error(error);
+        }
+    });
+
+    socket.on("friend-request-accepted", ({ senderId, recepientId }) => {
+        io.to(senderId).emit(`receive-friend-request-status-${recepientId}`, "friend");
     });
 
     socket.on("disconnect", async () => {
@@ -253,21 +320,18 @@ io.on("connection", (socket) => {
     });
 });
 
-const User = require('./models/user');
-const Message = require('./models/message');
-const UnseenMessage = require('./models/unseenMessage');
 
 // endpoint for the registration of user
-app.post('/register', async(req, res) => {
+app.post('/register', async (req, res) => {
     const { name, email, password, image } = req.body;
-    
+
     //create new user request
     const binaryData = Buffer.from(image, 'base64');
-    
+
     // Upload the compressed image to S3
-    const result = await s3Upload({ buffer: binaryData, originalname: name+".jpeg" });
-    
-    const newUser = new User({ name, email, password, image:result.Location });
+    const result = await s3Upload({ buffer: binaryData, originalname: name + ".jpeg" });
+
+    const newUser = new User({ name, email, password, image: result.Location });
 
     // save the user to database
     newUser.save().then(() => {
@@ -315,7 +379,7 @@ app.post('/login', (req, res) => {
 app.get('/user/:userId', async (req, res) => {
     try {
         const userId = req.params.userId;
-        const user = await User.findOne({ _id:  userId});
+        const user = await User.findOne({ _id: userId });
         res.status(200).json(user);
     } catch (error) {
         console.log("Error retrieving user", error);
@@ -332,7 +396,7 @@ app.get('/users/:userId', async (req, res) => {
 
         // Define a function to determine the status
         const getStatus = (user) => {
-            if (user.sentFriendRequests.includes(loggedInUserId)) {
+            if (user.friendRequests.includes(loggedInUserId)) {
                 return "pending";
             } else if (user.friends.includes(loggedInUserId)) {
                 return "friend";
@@ -376,17 +440,18 @@ app.post('/friend-request', async (req, res) => {
     try {
         // update the recepients friendRequests Array
         await User.findByIdAndUpdate(selectedUserId, {
-            $push: { friendRequests: currentUserId }
+            $addToSet: { friendRequests: currentUserId }
         });
 
         // update the senders sendFriendRequests Array
         await User.findByIdAndUpdate(currentUserId, {
-            $push: { sentFriendRequests: selectedUserId }
+            $addToSet: { sentFriendRequests: selectedUserId }
         });
-        res.status(200);
+        res.status(200).json({ message: "Friend request sent successfully" });
     }
     catch (error) {
-        res.status(500);
+        console.log("Error sending friend request")
+        res.status(500).json({ message: "Error sending friend request" });
     }
 });
 
@@ -515,12 +580,14 @@ app.get("/messages/:senderId/:recepientId", async (req, res) => {
 
         // Merge read and unread messages into a single array
         let combinedMessages = [...readMessages, ...unreadMessages.map(message => ({
+            cid: message.cid,
             senderId: message.senderId,
             recepientId: message.recepientId,
             messageType: message.messageType,
             message: message.message,
             timeStamp: message.timeStamp,
-            imageUrl: message.imageUrl
+            imageUrl: message.imageUrl,
+            messageSeen: message.messageSeen
         }))];
 
         // Sort combined messages based on timeStamp
@@ -542,7 +609,8 @@ app.post('/delete-messages', async (req, res) => {
         if (!Array.isArray(messages) || messages.length === 0) {
             return res.status(400).json({ message: "Invalid request" });
         }
-        await Message.deleteMany({ _id: { $in: messages } });
+        await Message.deleteMany({ cid: { $in: messages } });
+        await UnseenMessage.deleteMany({ cid: { $in: messages } });
         res.status(200).json({ message: "Messages deleted successfully" });
     }
     catch (error) {
@@ -607,12 +675,14 @@ app.get("/mark-unread-messages/:senderId/:recepientId", async (req, res) => {
         if (messages.length > 0) {
             // Map messages to a format suitable for insertion
             const messagesToInsert = messages.map(message => ({
+                cid:message.cid,
                 senderId: message.senderId,
                 recepientId: message.recepientId,
                 messageType: message.messageType,
                 message: message.message,
                 timeStamp: message.timeStamp,
-                imageUrl: message.imageUrl
+                imageUrl: message.imageUrl,
+                messageSeen: "delivered"
             }));
 
             // Insert all messages in one go

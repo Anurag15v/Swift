@@ -5,7 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { MaterialIcons } from '@expo/vector-icons';
 import { UserType } from '../UserContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {jwtDecode} from "jwt-decode";
+import { jwtDecode } from "jwt-decode";
 import { decode } from "base-64";
 import axios from 'axios';
 import User from '../components/User';
@@ -14,37 +14,33 @@ import socket from '../socket';
 global.atob = decode;
 
 const HomeScreen = () => {
-  
+
   const navigation = useNavigation();
   const { userId, setUserId } = useContext(UserType);
-  const [users,setUsers]=useState([]);
+  const [users, setUsers] = useState([]);
   const [appState, setAppState] = useState(AppState.currentState);
-  const [currentUser,setCurrentUser]=useState({});
-  const handleLogOut=async()=>
-  {
+  const [currentUser, setCurrentUser] = useState({});
+  const handleLogOut = async () => {
     await AsyncStorage.removeItem("authToken");
     ToastAndroid.show('Logged Out', ToastAndroid.SHORT);
     navigation.replace("Login");
   }
-  useEffect(()=>
-  {
-      const getCurrentUser=async()=>
-      {
-        const token=await AsyncStorage.getItem("authToken");
-        const decodedToken = jwtDecode(token);
-        const userId=decodedToken.userId;
-        setUserId(userId);
-        axios.get(`http://10.145.206.139:8000/user/${userId}`).then((res)=>
-        {
-          setCurrentUser(res.data);
-        }).catch(err=>
-        {
-          console.log("Error retrieving users",err);
-        });
-      }
-      getCurrentUser();
+  useEffect(() => {
+    const getCurrentUser = async () => {
+      const token = await AsyncStorage.getItem("authToken");
+      const decodedToken = jwtDecode(token);
+      const userId = decodedToken.userId;
+      setUserId(userId);
+      //await AsyncStorage.removeItem("authToken");
+      axios.get(`http://192.168.152.216:8000/user/${userId}`).then((res) => {
+        setCurrentUser(res.data);
+      }).catch(err => {
+        console.log("Error retrieving user", err);
+      });
+    }
+    getCurrentUser();
 
-  },[]);
+  }, []);
   useLayoutEffect(() => {
     navigation.setOptions({
       headerTitle: "",
@@ -53,31 +49,30 @@ const HomeScreen = () => {
       ),
       headerRight: () => (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Ionicons onPress={()=>navigation.navigate("Chats")} name="chatbox-ellipses-outline" size={24} color="black" />
-          <MaterialIcons onPress={()=>navigation.navigate("Friends")} name="people-outline" size={24} color="black" />
-          <Pressable onPress={()=>navigation.navigate("Profile",{data:currentUser})}>
-          <Image style={{height:35,width:35,borderRadius:50}} source={{uri:currentUser.image}}/>
+          <Ionicons onPress={() => navigation.navigate("Chats")} name="chatbox-ellipses-outline" size={24} color="black" />
+          <MaterialIcons onPress={() => navigation.navigate("Friends")} name="people-outline" size={24} color="black" />
+          <Pressable onPress={() => navigation.navigate("Profile", { data: currentUser })}>
+            <Image style={{ height: 35, width: 35, borderRadius: 50 }} source={{ uri: currentUser.image }} />
           </Pressable>
           <MaterialIcons onPress={handleLogOut} name="logout" size={24} color="black" />
         </View>
       )
     })
   }, [currentUser]);
-  useEffect(()=>
-  {
-    const fetchUsers=async()=>
-    {
-      axios.get(`http://10.145.206.139:8000/users/${userId}`).then((res)=>
+  useEffect(() => {
+    const fetchUsers = async () => {
+      if(userId)
       {
-        setUsers(res.data);
-      }).catch(err=>
-      {
-        console.log("Error retrieving users",err);
-      });
+        axios.get(`http://192.168.152.216:8000/users/${userId}`).then((res) => {
+          setUsers(res.data);
+        }).catch(err => {
+          console.log("Error retrieving users", err);
+        });
+      }
     }
     fetchUsers();
-  },[ currentUser]);
-  
+  }, [currentUser]);
+
   useEffect(() => {
     const handleAppStateChange = (nextAppState) => {
       if (nextAppState === 'background' || nextAppState === 'inactive') {
@@ -93,7 +88,7 @@ const HomeScreen = () => {
           socket.connect();
           socket.emit("setup", {
             _id: userId
-        });
+          });
         }
       }
       setAppState(nextAppState);
@@ -101,40 +96,25 @@ const HomeScreen = () => {
 
     // Add event listener for app state changes
     AppState.addEventListener('change', handleAppStateChange);
-    
-  }, [socket,appState]);
-  
 
-  // useEffect(()=>
-  // {
-  //   const backAction=()=>
-  //   {
-  //     socket.disconnect();
-  //     return true;
-  //   }
-  //   const backHandler=BackHandler.addEventListener('hardwareBackPress',backAction);
-  //   return ()=>
-  //   {
-  //     backHandler.remove();
-  //   }
+  }, [socket, appState]);
 
-  // },[]);
 
-return (
-  <View>
-    <View style={styles.userContianer}>
-      {users.map((item,index)=>{
-        return <User key={index} item={item}/>
-      })}
+  return (
+    <View>
+      <View style={styles.userContianer}>
+        {users.map((item, index) => {
+          return <User key={index} item={item} />
+        })}
+      </View>
     </View>
-  </View>
-)
+  )
 }
 
 export default HomeScreen
 
 const styles = StyleSheet.create({
-  userContianer:{
-    padding:10
+  userContianer: {
+    padding: 10
   }
 });

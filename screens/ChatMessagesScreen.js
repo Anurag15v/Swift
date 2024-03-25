@@ -14,6 +14,8 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system';
 import LottieView from 'lottie-react-native';
 import { Audio, RecordingOptionsPresets } from "expo-av";
+import uuid from 'react-native-uuid';
+
 
 const ChatMessagesScreen = () => {
     const [showEmojiSelector, setShowEmojiSelector] = useState(false);
@@ -42,12 +44,15 @@ const ChatMessagesScreen = () => {
 
     useEffect(() => {
 
-        socket.emit("user-joined-window",{userId,recepientId});
+        socket.emit("user-joined-window", {roomId:combinedId(), userId, recepientId });
         // Add listener for incoming messages
         socket.on("message", (receivedMessage) => {
+
             // Handle incoming message here
             setMessages(prevMessages => [...prevMessages, receivedMessage]);
+
             // Update state or perform other actions based on the received message
+            socket.emit("send-recepient-message-status", { messageId: receivedMessage._id, cid: receivedMessage.cid, roomId: combinedId(), status: "delivered" });
         });
 
         // Add listener for typing
@@ -64,17 +69,36 @@ const ChatMessagesScreen = () => {
         socket.on("user-joined", (status) => {
             setOtherUserStatus(status);
         });
-        return ()=>
-        {
+
+        // Add listener to hear message status
+        socket.on("receive-message-status", ({ messageId, cid, status }) => {
+            setMessages(prevMessages => {
+                // Map over the previous messages and update the messageSeen status for the messages with matching CID
+                const updatedMessages = prevMessages.map(message => {
+                    // Check if the message's conversation ID matches the provided CID
+                    if (message.cid === cid) {
+                        // If so, update the messageSeen status
+                        return { ...message, messageSeen: status };
+                    }
+                    // If CID doesn't match, return the original message
+                    return message;
+                });
+                return updatedMessages;
+            });
+        });
+
+        return () => {
             socket.off("user-joined");
             socket.off("user-joined-window");
+            socket.off("receive-message-status");
         }
 
     }, [userId]);
 
+
     const fetchMessages = async () => {
         try {
-            const res = await fetch(`http://10.145.206.139:8000/messages/${userId}/${recepientId}`);
+            const res = await fetch(`http://192.168.152.216:8000/messages/${userId}/${recepientId}`);
             const data = await res.json();
             if (res.ok) {
                 setMessages(data.messages);
@@ -86,17 +110,25 @@ const ChatMessagesScreen = () => {
         }
     }
 
-    const fetchMessagesAndMarkRead=async()=>
-    {
+    const markMessagesSeen = async (messages) => {
+        for (let i = 0; i < messages.length; i++) {
+            if (messages[i].messageSeen === "delivered") {
+                console.log(messages[i].cid);
+                socket.emit('send-recepient-message-status',{messageId:messages[i]._id,cid:messages[i].cid,roomId:combinedId(),status:"delivered"});
+            }
+        }
+    }
+
+    const fetchMessagesAndMarkDelivered = async () => {
         try {
-            const res=await fetch(`http://10.145.206.139:8000/mark-unread-messages/${userId}/${recepientId}`);
-            if(res.ok)
-            {
-                const res2 = await fetch(`http://10.145.206.139:8000/messages/${userId}/${recepientId}`);
+            const res = await fetch(`http://192.168.152.216:8000/mark-unread-messages/${userId}/${recepientId}`);
+            if (res.ok) {
+                const res2 = await fetch(`http://192.168.152.216:8000/messages/${userId}/${recepientId}`);
                 const data = await res2.json();
                 if (res2.ok) {
                     setMessages(data.messages);
                     socket.emit("join-chat", { room: combinedId(), senderId: userId, recepientId });
+                    await markMessagesSeen(data.messages);
                 }
             }
         }
@@ -106,7 +138,7 @@ const ChatMessagesScreen = () => {
     }
 
     useEffect(() => {
-        fetchMessagesAndMarkRead();
+        fetchMessagesAndMarkDelivered();
     }, []);
 
     useEffect(() => {
@@ -117,7 +149,7 @@ const ChatMessagesScreen = () => {
         socket.on("online", (status) => {
             setOnline(status);
             if (!status) {
-                fetch(`http://10.145.206.139:8000/last-seen/${recepientId}`)
+                fetch(`http://192.168.152.216:8000/last-seen/${recepientId}`)
                     .then(res => {
                         if (res.ok) {
                             return res.json();
@@ -199,7 +231,7 @@ const ChatMessagesScreen = () => {
     useEffect(() => {
         const fetchRecepientsData = async () => {
             try {
-                const res = await fetch(`http://10.145.206.139:8000/user/${recepientId}`);
+                const res = await fetch(`http://192.168.152.216:8000/user/${recepientId}`);
                 const data = await res.json();
                 setRecepientData(data);
             }
@@ -209,18 +241,19 @@ const ChatMessagesScreen = () => {
         }
         fetchRecepientsData();
     }, [])
-    const checkRecepientIsJoined=()=>
-    {
-        socket.emit("check-joined",{userId:recepientId,roomId:combinedId()});
+    const checkRecepientIsJoined = () => {
+        socket.emit("check-joined", { userId: recepientId, roomId: combinedId() });
         return true;
     }
 
-    const handleSend = async (messageType, imageBase64) => {
+    const handleSend = async (messageType, imageUri, imageBase64) => {
         try {
             const formData = new FormData();
+            const cid = uuid.v4();
+            formData.append("cid", cid);
             formData.append("senderId", userId);
             formData.append("recepientId", recepientId);
-
+            formData.append("timeStamp", new Date());
             // If the message is text or image
             if (messageType === "image") {
                 formData.append("messageType", "image");
@@ -239,17 +272,20 @@ const ChatMessagesScreen = () => {
             }
             formData.append("roomId", combinedId());
 
-            // Emit the message with form data to the backend via socket
-            
-            // check if other user is not joined the room
+
+
+            const messageBody = { cid, senderId: { _id: userId, name: 'unknown' }, recepientId, messageType, message, timeStamp: new Date(), imageUrl: imageUri, messageSeen: "sending" };
+            setMessages((prevMessages) => [...prevMessages, messageBody]);
+
+            // check if other user is not joined the room            
             checkRecepientIsJoined();
-            if (otherUserStatus===false)
-            {
+            if (otherUserStatus === false) {
+                // Emit the message with form data to the backend via socket
                 socket.emit("unread-messages", formData);
                 socket.emit("send-unread-message-count", recepientId);
             }
-            else
-            {
+            else {
+                // Emit the message with form data to the backend via socket
                 socket.emit("read-message", formData);
             }
             socket.emit("stop-typing", combinedId());
@@ -288,7 +324,7 @@ const ChatMessagesScreen = () => {
                             <Text style={{ fontSize: 16, fontWeight: '500' }}>{selectedMessages.length}</Text>
                         </View>
                     ) : (
-                        <TouchableOpacity onPress={() => navigation.navigate("SingleChatProfile",{ recepientId })}>
+                        <TouchableOpacity onPress={() => navigation.navigate("SingleChatProfile", { recepientId })}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                                 <Image style={{
                                     width: 30,
@@ -326,7 +362,7 @@ const ChatMessagesScreen = () => {
     }, [recepientData, selectedMessages, online, lastSeenTime]);
     const deleteMessages = async (messageIds) => {
         try {
-            const res = await fetch('http://10.145.206.139:8000/delete-messages/', {
+            const res = await fetch('http://192.168.152.216:8000/delete-messages/', {
                 method: 'POST',
                 headers:
                 {
@@ -368,17 +404,17 @@ const ChatMessagesScreen = () => {
             });
 
             // Now you can send the base64Image string to your backend
-            handleSend("image", base64Image);
+            handleSend("image", compressedImage.uri, base64Image);
         }
     }
     const handleSelectMessage = (message) => {
         // check if message is already selected
-        const isSelected = selectedMessages.includes(message._id);
+        const isSelected = selectedMessages.includes(message.cid);
         if (isSelected) {
-            setSelectedMessages((prevMessages) => prevMessages.filter((id) => id !== message._id))
+            setSelectedMessages((prevMessages) => prevMessages.filter((id) => id !== message.cid))
         }
         else {
-            setSelectedMessages((prevMessages) => [...prevMessages, message._id]);
+            setSelectedMessages((prevMessages) => [...prevMessages, message.cid]);
         }
     }
     const handleTyping = (text) => {
@@ -410,7 +446,7 @@ const ChatMessagesScreen = () => {
                 return true;
             }
             else {
-                socket.emit("user-left-window",{userId,recepientId});
+                socket.emit("user-left-window", {roomId:combinedId(), userId, recepientId });
                 return false;
             }
         }
@@ -486,7 +522,7 @@ const ChatMessagesScreen = () => {
             <ScrollView ref={scrollViewRef} contentContainerStyle={{ flexGrow: 1 }} onContentSizeChange={handleContentSizeChange}>
                 {messages.map((item, index) => {
                     if (item.messageType === "text") {
-                        const isSelected = selectedMessages.includes(item._id);
+                        const isSelected = selectedMessages.includes(item.cid);
                         return (
                             <Pressable
                                 onLongPress={() => handleSelectMessage(item)}
@@ -511,12 +547,13 @@ const ChatMessagesScreen = () => {
                                     isSelected && { width: '100%', backgroundColor: '#F0FFFF' }
                                 ]}>
                                 <Text style={{ fontSize: 13, textAlign: isSelected ? "left" : "right" }}>{item?.message}</Text>
+                                {item?.senderId?._id === userId && <Text style={{ textAlign: 'right', fontSize: 9, color: 'gray', marginTop: 5 }}>{item?.messageSeen}</Text>}
                                 <Text style={{ textAlign: 'right', fontSize: 9, color: 'gray', marginTop: 5 }}>{formatTime(item?.timeStamp)}</Text>
                             </Pressable>
                         )
                     }
                     else if (item.messageType === "image") {
-                        const isSelected = selectedMessages.includes(item._id);
+                        const isSelected = selectedMessages.includes(item.cid);
                         return (<Pressable
                             onPress={() => handleImageClick(item.imageUrl)}
                             onLongPress={() => handleSelectMessage(item)}
@@ -545,6 +582,7 @@ const ChatMessagesScreen = () => {
                                     source={{ uri: item.imageUrl }}
                                     style={{ width: 200, height: 200, borderRadius: 7 }}
                                 />
+                                {item?.senderId?._id === userId && <Text style={{ textAlign: 'right', fontSize: 9, color: 'gray', marginTop: 5 }}>{item?.messageSeen}</Text>}
                                 <Text
                                     style={{
                                         textAlign: "right",

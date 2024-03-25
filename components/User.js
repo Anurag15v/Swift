@@ -1,16 +1,30 @@
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native'
-import React,{useContext,useState} from 'react'
+import React,{useContext,useEffect,useState} from 'react'
 import { UserType } from '../UserContext'
 import { FontAwesome5 } from '@expo/vector-icons';
+import socket from '../socket';
 
 const User = ({item}) => {
   const {userId,setUserId}=useContext(UserType);
-  const [requestSent,setRequestSent]=useState(false);
+  const [requestStatus,setRequestStatus]=useState("");
+  useEffect(()=>
+  {
+    socket.on(`receive-friend-request-status-${item._id}`,(status)=>
+    {
+      console.log(status);
+      setRequestStatus(status);
+    });
+    return ()=>
+    {
+      socket.off(`receive-friend-request-status-${item._id}`);
+    }
+  },[]);
+
   const sendFriendRequest=async(currentUserId,selectedUserId)=>
   {
     try
     {
-      const res=await fetch('http://10.145.206.139:8000/friend-request',{
+      const res=await fetch('http://192.168.152.216:8000/friend-request',{
         method:'POST',
         headers:{
           "Content-Type":'application/json'
@@ -19,7 +33,7 @@ const User = ({item}) => {
       });
       if(res.ok)
       {
-        setRequestSent(true);
+        socket.emit("send-friend-request",{senderId:currentUserId,recepientId:selectedUserId});
       }
     }
     catch(error)
@@ -30,24 +44,24 @@ const User = ({item}) => {
   return (
     <Pressable style={styles.container}>
       <View>
-        <Image style={styles.image} source={{uri:item.image}} />
+        <Image style={styles.image} source={{uri:item?.image}} />
       </View>
       <View style={styles.textContainer}>
         <Text style={styles.nameText}>
           {item?.name}
         </Text>
       </View>
-      {item.status==="" &&
+      {(item.status==="" && requestStatus==="") &&
       <Pressable onPress={()=>sendFriendRequest(userId,item._id)} style={styles.btn}>
         <Text style={styles.btnText}>Add Friend</Text>
       </Pressable>}
-      {item.status==="friend" && 
+      {(item.status==="friend" || requestStatus==="friend") && 
       <Pressable style={styles.friendsBtn}>
         <FontAwesome5 name="user-friends" size={24} color="#1443a3" />
         <Text style={styles.friendBtnText}>Friends</Text>
     </Pressable>}
-    {item.status==="pending" && 
-      <Pressable style={styles.btnText}>
+    {(item.status==="pending"  || requestStatus==="pending") && 
+      <Pressable style={styles.btn}>
         <Text style={styles.btnText}>Pending...</Text>
     </Pressable>}
     </Pressable>
