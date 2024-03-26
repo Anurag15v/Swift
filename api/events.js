@@ -1,0 +1,25 @@
+const events={
+    CONN:'connection',
+    SETUP:'setup',
+    ONLINE:'online',
+    JOIN_CHAT:'join-chat',
+    TYPING:'typing',
+    STOP_TYPING:'stop-typing',
+    CHECK_ONLINE:'check-online',
+    READ_MSG:'read-message',
+    UNREAD_MSG:'unread-messages',
+    RECEIVE_MSG_STATUS:'receive-message-status',
+    MESSAGE:'message',
+    SEND_MSG_STATUS:'send-recepient-message-status',
+    LEFT_WINDOW:'user-left-window',
+    JOINED_WINDOW:'user-joined-window',
+    USER_JOINED:'user-joined',
+    CHECK_JOINED:'check-joined',
+    SEND_UNREAD_MSG_COUNT:'send-unread-message-count',
+    UNREAD_MSG_COUNT:'unread-message-count',
+    SEND_FRIEND_REQ:'send-friend-request',
+    RECEIVE_FRIEND_REQ:'received-friend-request',
+    FRIEND_REQ_ACCEPT:'friend-request-accepted',
+    DIS_CONN:'disconnect'
+};
+module.exports=events;

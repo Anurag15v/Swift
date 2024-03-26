@@ -43,7 +43,7 @@ const LoginScreen = () => {
             email,
             password
         };
-        axios.post(`http://192.168.152.216:8000/login`, user).then((res) => {
+        axios.post(`http://10.145.206.139:8000/login`, user).then((res) => {
             const token = res.data.token;
             AsyncStorage.setItem("authToken", token);
             socket.connect();

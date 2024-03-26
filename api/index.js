@@ -4,8 +4,8 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose')
 const passport = require('passport')
-const localStrategy = require('passport-local').Strategy;
 const sharp = require('sharp');
+const events=require('./events');
 const { createServer } = require("http");
 const { Server } = require("socket.io");
 const app = express();
@@ -26,7 +26,7 @@ const io = new Server(httpServer, {
 
 const jwt = require('jsonwebtoken');
 
-mongoose.connect("mongodb+srv://anuragvaibhav7:Anurag%401@cluster0.m9mb0pl.mongodb.net/", {
+mongoose.connect(process.env.DATABASE_CONNECTION_URL, {
     useNewUrlParser: true,
     useUnifiedTopology: true
 }).then(() => {
@@ -39,9 +39,6 @@ httpServer.listen(port, () => {
     console.log('Server running on port', port);
 });
 
-const multer = require('multer');
-const storage = multer.memoryStorage();
-const upload = multer({ storage: storage });
 
 let onlineUsers = [];
 let onlineRooms = {};
@@ -51,10 +48,9 @@ const User = require('./models/user');
 const Message = require('./models/message');
 const UnseenMessage = require('./models/unseenMessage');
 
-io.on("connection", (socket) => {
-    console.log("connected to socket.io");
-
-    socket.on("setup", (userData) => {
+const userSetup=(socket)=>
+{
+    socket.on(events.SETUP, (userData) => {
         socket.join(userData._id);
         if (!onlineUsers.some((user) => user.userId === userData._id)) {
             // if user is not added before
@@ -67,12 +63,15 @@ io.on("connection", (socket) => {
         let userConnectedRooms = onlineRooms[userData._id];
         if (userConnectedRooms) {
             userConnectedRooms.forEach((item) => {
-                socket.to(item[1]).emit("online", true);
+                socket.to(item[1]).emit(events.ONLINE, true);
             });
         }
     });
+}
 
-    socket.on("join-chat", ({ room, senderId, recepientId }) => {
+const joinRoom=(socket)=>
+{
+    socket.on(events.JOIN_CHAT, ({ room, senderId, recepientId }) => {
         socket.join(room);
         if (onlineRooms.hasOwnProperty(senderId))
             onlineRooms[senderId].add([recepientId, room]);
@@ -86,55 +85,42 @@ io.on("connection", (socket) => {
 
         console.log("User joined room", room);
     });
+}
 
-    socket.on("typing", (room) => {
-        socket.in(room).emit("typing");
+const typingEvent=(socket)=>
+{
+    socket.on(events.TYPING, (room) => {
+        socket.in(room).emit(events.TYPING);
     });
 
-    socket.on("stop-typing", (room) => {
-        socket.in(room).emit("stop-typing");
+    socket.on(events.STOP_TYPING, (room) => {
+        socket.in(room).emit(events.STOP_TYPING);
     });
+}
 
-    // check if user is online
-    socket.on("check-online", (userId) => {
+const onlinerCheck=(socket)=>
+{
+    socket.on(events.CHECK_ONLINE, (userId) => {
         if (onlineUsers.some((user) => user.userId === userId)) {
-            socket.emit("online", true);
+            socket.emit(events.ONLINE, true);
         }
         else {
-            socket.emit("online", false);
+            socket.emit(events.ONLINE, false);
         }
     });
+}
 
-    socket.on("read-message", async (obj) => {
-        // Get the FormData from obj.data
-        const formDataParts = obj._parts;
+const emitReadMessage=(socket)=>
+{
+    socket.on(events.READ_MSG, async (messageBody) => {
+        const {cid,senderId,recepientId,timeStamp,messageType,roomId,imageFile,messageText}=messageBody;
+
         // Initialize variables for message details
-        let senderId, roomId, recepientId, messageType, messageText, cid, timeStamp = null;
         let imgUrl = "false";
-        // Iterate over the entries of the FormData parts using for...of loop
-        for (const [key, value] of formDataParts) {
-            if (key === "cid") {
-                cid = value;
-            }
-            else if (key === "timeStamp") {
-                timeStamp = value;
-            }
-            else if (key === "senderId") {
-                senderId = value;
-            } else if (key === "recepientId") {
-                recepientId = value;
-            }
-            else if (key === "roomId") {
-                roomId = value;
-            } else if (key === "messageType") {
-                messageType = value;
-            } else if (key === "messageText") {
-                messageText = value;
-            } else if (key === "imageFile") {
-                // Process image file (if present)
-                // You can use logic to compress and upload the image here
-                // For example:
-                const binaryData = Buffer.from(value.uri, 'base64');
+        
+        if(imageFile)
+        {
+            const binaryData = Buffer.from(imageFile.uri, 'base64');
                 // const imageBuffer = value._data;
 
                 // Process the image buffer using sharp
@@ -144,9 +130,8 @@ io.on("connection", (socket) => {
                     .toBuffer();
 
                 // Upload the compressed image to S3
-                const result = await s3Upload({ buffer: compressedImageBuffer, originalname: value.name });
+                const result = await s3Upload({ buffer: compressedImageBuffer, originalname: imageFile.name });
                 imgUrl = result.Location;
-            }
         }
         // Create and save the new message
         const newMessage = new Message({ cid, senderId, recepientId, messageType, message: messageText, timeStamp, imageUrl: imgUrl, messageSeen: "sent" });
@@ -156,70 +141,56 @@ io.on("connection", (socket) => {
 
 
         // Emit the chat message to the recipient and send status to the sender
-        socket.to(roomId).emit("receive-message-status", { messageId: newMessage._id, cid, status: "sent" });
-        socket.to(roomId).emit("message", message);
+        socket.to(roomId).emit(events.RECEIVE_MSG_STATUS, { messageId: newMessage._id, cid, status: "sent" });
+        socket.to(roomId).emit(events.MESSAGE, message);
     });
+}
 
-    socket.on("unread-messages", async (obj) => {
-        // Get the FormData from obj.data
-        const formDataParts = obj._parts;
+const emitUnreadMessage=(socket)=>
+{
+    socket.on(events.UNREAD_MSG, async (messageBody) => {
+        
+        const {cid,senderId,recepientId,timeStamp,messageType,roomId,imageFile,messageText}=messageBody;
+
         // Initialize variables for message details
-        let senderId, roomId, recepientId, messageType, messageText, cid, timeStamp = null;
         let imgUrl = "false";
-        // Iterate over the entries of the FormData parts using for...of loop
-        for (const [key, value] of formDataParts) {
-            if (key === "cid") {
-                cid = value;
-            }
-            else if (key === "timeStamp") {
-                timeStamp = value;
-            }
-            else if (key === "senderId") {
-                senderId = value;
-            } else if (key === "recepientId") {
-                recepientId = value;
-            }
-            else if (key === "roomId") {
-                roomId = value;
-            } else if (key === "messageType") {
-                messageType = value;
-            } else if (key === "messageText") {
-                messageText = value;
-            } else if (key === "imageFile") {
-                // Process image file (if present)
-                // You can use logic to compress and upload the image here
-                // For example:
-                const binaryData = Buffer.from(value.uri, 'base64');
-                // const imageBuffer = value._data;
+        
+        if(imageFile)
+        {
+            const binaryData = Buffer.from(imageFile.uri, 'base64');
+            // const imageBuffer = value._data;
 
-                // Process the image buffer using sharp
-                const compressedImageBuffer = await sharp(binaryData)
-                    .resize({ width: 400 })
-                    .jpeg({ quality: 40 })
-                    .toBuffer();
+            // Process the image buffer using sharp
+            const compressedImageBuffer = await sharp(binaryData)
+                .resize({ width: 400 })
+                .jpeg({ quality: 40 })
+                .toBuffer();
 
-                // Upload the compressed image to S3
-                const result = await s3Upload({ buffer: compressedImageBuffer, originalname: value.name });
-                imgUrl = result.Location;
-            }
+            // Upload the compressed image to S3
+            const result = await s3Upload({ buffer: compressedImageBuffer, originalname: imageFile.name });
+            imgUrl = result.Location;
         }
 
         // Create and save the new message
         const newMessage = new UnseenMessage({ cid, senderId, recepientId, messageType, message: messageText, timeStamp, imageUrl: imgUrl, messageSeen: "sent" });
         await newMessage.save();
-
+        
+        console.log("sent",roomId);
         const message = { _id: 'unknown', cid, senderId: { _id: senderId, name: 'unknown' }, recepientId, messageType, message: messageText, timeStamp, imageUrl: imgUrl, messageSeen: "sent" };
-
-        // Emit the chat message to the recipient and send status to the sender
-        io.to(roomId).emit("receive-message-status", { messageId: "", cid, status: "sent" });
-        socket.to(roomId).emit("message", message);
+        // Emit the chat message status to the recipient and send status to the sender
+        
+        io.to(roomId).emit(events.RECEIVE_MSG_STATUS, { messageId: "", cid, status: "sent" });
+        socket.to(roomId).emit(events.MESSAGE, message);
     });
+}
 
-    socket.on("send-recepient-message-status", async ({ messageId, cid, roomId, status }) => {
+const emitMessageStatus=(socket)=>
+{
+    socket.on(events.SEND_MSG_STATUS, async ({ messageId, cid, roomId, status }) => {
         try {
 
             // send status delivered to sender
-            socket.to(roomId).emit("receive-message-status", { messageId, cid, status });
+            socket.to(roomId).emit(events.RECEIVE_MSG_STATUS, { messageId, cid, status });
 
             if (messageId !== "unknown") {
                 // Update the message directly in the database
@@ -238,58 +209,75 @@ io.on("connection", (socket) => {
                 );
             }
             // send status seen to sender
-            socket.to(roomId).emit("receive-message-status", { messageId, cid, status: "seen" });
+            socket.to(roomId).emit(events.RECEIVE_MSG_STATUS, { messageId, cid, status: "seen" });
         }
         catch (error) {
             console.log(error, "Error in sending message status");
         }
     });
+}
 
-    socket.on("user-left-window", ({ roomId, userId, recepientId }) => {
+const userWindowActivity=(socket)=>
+{
+    socket.on(events.LEFT_WINDOW, ({ roomId, userId, recepientId }) => {
 
         socket.leave(roomId);
         windowLeft[userId] = false;
-        io.to(recepientId).emit("user-joined", false); // Emitting to recepientId
+        io.to(recepientId).emit(events.USER_JOINED, false); // Emitting to recepientId
     });
 
-    socket.on("user-joined-window", ({ roomId, userId, recepientId }) => {
+    socket.on(events.JOINED_WINDOW, ({ roomId, userId, recepientId }) => {
         socket.join(roomId);
         windowLeft[userId] = true;
-        io.to(recepientId).emit("user-joined", true); // Emitting to recepientId
+        io.to(recepientId).emit(events.USER_JOINED, true); // Emitting to recepientId
     });
+}
 
-    socket.on("check-joined", ({ userId, roomId }) => {
+const checkUserRoomConnectivity=(socket)=>
+{
+    socket.on(events.CHECK_JOINED, ({ userId, roomId }) => {
         const roomSockets = io.sockets.adapter.rooms.get(roomId);
         if (roomSockets && roomSockets.size === 1 || !windowLeft[userId])
-            socket.emit("user-joined", false);
+            socket.emit(events.USER_JOINED, false);
         else
-            socket.emit("user-joined", true);
+            socket.emit(events.USER_JOINED, true);
     });
+}
 
-    socket.on("send-unread-message-count", (userId) => {
-
+const newMessageCountEmitter=(socket)=>
+{
+    socket.on(events.SEND_UNREAD_MSG_COUNT, (userId) => {
         if (userId) {
-            io.to(userId).emit("unread-message-count");
+            io.to(userId).emit(events.UNREAD_MSG_COUNT);
         } else {
             console.log("User is not online"); // Handle the case where the user is not online
         }
     });
+}
 
-    socket.on("send-friend-request", async ({ senderId, recepientId }) => {
+const sendFriendRequestEvent=(socket)=>
+{
+    socket.on(events.SEND_FRIEND_REQ, async ({ senderId, recepientId }) => {
         try {
             const user = await User.findOne({ _id: senderId });
             io.to(senderId).emit(`receive-friend-request-status-${recepientId}`, "pending");
-            io.to(recepientId).emit("received-friend-request", { _id: senderId, name: user.name, email: user.email, image: user.image });
+            io.to(recepientId).emit(events.RECEIVE_FRIEND_REQ, { _id: senderId, name: user.name, email: user.email, image: user.image });
         } catch (error) {
             console.error(error);
         }
     });
+}
 
-    socket.on("friend-request-accepted", ({ senderId, recepientId }) => {
+const emitFriendRequestStatus=(socket)=>
+{
+    socket.on(events.FRIEND_REQ_ACCEPT, ({ senderId, recepientId }) => {
         io.to(senderId).emit(`receive-friend-request-status-${recepientId}`, "friend");
     });
+}
 
-    socket.on("disconnect", async () => {
+const userDisconnectedEvent=(socket)=>
+{
+    socket.on(events.DIS_CONN, async () => {
         let userId = null;
         onlineUsers.forEach((user) => {
             if (user.socketId === socket.id) {
@@ -307,7 +295,7 @@ io.on("connection", (socket) => {
         let userConnectedRooms = onlineRooms[userId];
         if (userConnectedRooms) {
             userConnectedRooms.forEach((item) => {
-                socket.to(item[1]).emit("online", false);
+                socket.to(item[1]).emit(events.ONLINE, false);
             });
 
             // delete data but if we delete then if user re join from background. Then we lose data. 
@@ -318,6 +306,49 @@ io.on("connection", (socket) => {
 
         console.log("User Disconnected", socket.id);
     });
+}
+
+io.on(events.CONN, (socket) => {
+    console.log("connected to socket.io");
+    
+    // connect userId to socket
+    userSetup(socket);
+
+    // connect to a room
+    joinRoom(socket);
+
+    // typing event listener
+    typingEvent(socket);
+
+    // check if user is online
+    onlinerCheck(socket);
+    
+    // emit message if user if connected to room
+    emitReadMessage(socket);
+
+    // emit message if user is not connected to room
+    emitUnreadMessage(socket);
+    
+    // message status emitter - [delivered,seen]
+    emitMessageStatus(socket);
+    
+    // user window activity - [left,join]
+    userWindowActivity(socket);
+    
+    // check if both user's are connected
+    checkUserRoomConnectivity(socket);
+    
+    // emit new message count
+    newMessageCountEmitter(socket);
+    
+    // emitter related to sending friend request
+    sendFriendRequestEvent(socket);
+    
+    // emit accepted friend request status
+    emitFriendRequestStatus(socket);
+    
+    // event when user get's disconnected
+    userDisconnectedEvent(socket);
 });
 
 
@@ -506,44 +537,6 @@ app.get('/accepted-friends/:userId', async (req, res) => {
     }
 });
 
-// Configure multer for handling file uploads
-// const storage = multer.diskStorage({
-//     destination: function (req, file, cb) {
-//       cb(null, "files/"); // Specify the desired destination folder
-//     },
-//     filename: function (req, file, cb) {
-//       // Generate a unique filename for the uploaded file
-//       const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-//       cb(null, uniqueSuffix + "-" + file.originalname);
-//     },
-//   });
-
-
-// endpoint to post messages and store it in backend
-app.post('/messages', upload.single('imageFile'), async (req, res) => {
-    try {
-        const { senderId, recepientId, messageType, messageText } = req.body;
-        let imgUrl = null;
-        if (messageType === "image") {
-            // logic
-            // Compress the image using sharp
-            const compressedImageBuffer = await sharp(req.file.buffer)
-                .resize({ width: 400 }) // Resize the image as needed
-                .jpeg({ quality: 40 })   // Set JPEG quality
-                .toBuffer();
-            req.file.buffer = compressedImageBuffer;
-            const result = await s3Upload(req.file);
-            imgUrl = result.Location;
-        }
-        const newMessage = new Message({ senderId, recepientId, messageType, message: messageText, timeStamp: new Date(), imageUrl: imgUrl });
-        await newMessage.save();
-        res.status(200).json({ message: 'Message sent successfully' });
-    }
-    catch (error) {
-        console.log(error);
-        res.status(500).json({ message: "Internal server error" });
-    }
-});
 
 // endpoint to get userDetails to design chat room header
 app.get('/user/:userId', async (req, res) => {

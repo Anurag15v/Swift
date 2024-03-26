@@ -2,7 +2,7 @@ import { StyleSheet, Text, View, ScrollView, KeyboardAvoidingView, TextInput, Pr
 import React, { useState, useContext, useLayoutEffect, useEffect, useRef } from 'react'
 import { Entypo } from '@expo/vector-icons';
 import { Feather } from '@expo/vector-icons';
-import EmojiSelector from 'react-native-emoji-selector';
+import EmojiSelector, { Categories } from 'react-native-emoji-selector';
 import { UserType } from '../UserContext'
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -35,16 +35,12 @@ const ChatMessagesScreen = () => {
     const [lastSeenTime, setLastSeenTime] = useState("");
     const [showModal, setShowModal] = useState(false);
     const [imageUri, setImageUri] = useState("");
-    const [isRecording, setIsRecording] = useState(false);
-    const [recording, setRecording] = useState(null);
-    const [recordingStatus, setRecordingStatus] = useState("idle");
-    const [audioPermission, setAudioPermission] = useState(null);
-    const [recordedAudio, setRecordedAudio] = useState(null);
+
     const [otherUserStatus, setOtherUserStatus] = useState(false);
 
     useEffect(() => {
 
-        socket.emit("user-joined-window", {roomId:combinedId(), userId, recepientId });
+        socket.emit("user-joined-window", { roomId: combinedId(), userId, recepientId });
         // Add listener for incoming messages
         socket.on("message", (receivedMessage) => {
 
@@ -98,7 +94,7 @@ const ChatMessagesScreen = () => {
 
     const fetchMessages = async () => {
         try {
-            const res = await fetch(`http://192.168.152.216:8000/messages/${userId}/${recepientId}`);
+            const res = await fetch(`http://10.145.206.139:8000/messages/${userId}/${recepientId}`);
             const data = await res.json();
             if (res.ok) {
                 setMessages(data.messages);
@@ -114,16 +110,16 @@ const ChatMessagesScreen = () => {
         for (let i = 0; i < messages.length; i++) {
             if (messages[i].messageSeen === "delivered") {
                 console.log(messages[i].cid);
-                socket.emit('send-recepient-message-status',{messageId:messages[i]._id,cid:messages[i].cid,roomId:combinedId(),status:"delivered"});
+                socket.emit('send-recepient-message-status', { messageId: messages[i]._id, cid: messages[i].cid, roomId: combinedId(), status: "delivered" });
             }
         }
     }
 
     const fetchMessagesAndMarkDelivered = async () => {
         try {
-            const res = await fetch(`http://192.168.152.216:8000/mark-unread-messages/${userId}/${recepientId}`);
+            const res = await fetch(`http://10.145.206.139:8000/mark-unread-messages/${userId}/${recepientId}`);
             if (res.ok) {
-                const res2 = await fetch(`http://192.168.152.216:8000/messages/${userId}/${recepientId}`);
+                const res2 = await fetch(`http://10.145.206.139:8000/messages/${userId}/${recepientId}`);
                 const data = await res2.json();
                 if (res2.ok) {
                     setMessages(data.messages);
@@ -149,7 +145,7 @@ const ChatMessagesScreen = () => {
         socket.on("online", (status) => {
             setOnline(status);
             if (!status) {
-                fetch(`http://192.168.152.216:8000/last-seen/${recepientId}`)
+                fetch(`http://10.145.206.139:8000/last-seen/${recepientId}`)
                     .then(res => {
                         if (res.ok) {
                             return res.json();
@@ -186,26 +182,6 @@ const ChatMessagesScreen = () => {
     }, []);
 
     useEffect(() => {
-        async function getPermission() {
-            await Audio.requestPermissionsAsync()
-                .then((permission) => {
-                    console.log("Permission Granted: " + permission.granted);
-                    setAudioPermission(permission.granted);
-                })
-                .catch((error) => {
-                    console.log(error);
-                });
-        }
-
-        getPermission();
-        return () => {
-            if (recording) {
-                stopRecording();
-            }
-        };
-    }, []);
-
-    useEffect(() => {
         scrollToBottom();
     }, []);
 
@@ -231,7 +207,7 @@ const ChatMessagesScreen = () => {
     useEffect(() => {
         const fetchRecepientsData = async () => {
             try {
-                const res = await fetch(`http://192.168.152.216:8000/user/${recepientId}`);
+                const res = await fetch(`http://10.145.206.139:8000/user/${recepientId}`);
                 const data = await res.json();
                 setRecepientData(data);
             }
@@ -248,31 +224,30 @@ const ChatMessagesScreen = () => {
 
     const handleSend = async (messageType, imageUri, imageBase64) => {
         try {
-            const formData = new FormData();
             const cid = uuid.v4();
-            formData.append("cid", cid);
-            formData.append("senderId", userId);
-            formData.append("recepientId", recepientId);
-            formData.append("timeStamp", new Date());
+            const messageData = {
+                cid: cid,
+                senderId: userId,
+                recepientId: recepientId,
+                timeStamp: new Date(),
+                messageType: messageType,
+                roomId: combinedId(),
+
+            };
             // If the message is text or image
             if (messageType === "image") {
-                formData.append("messageType", "image");
-                formData.append("imageFile", {
+                messageData["imageFile"] = {
                     uri: imageBase64,
                     name: "image.jpg",
                     type: "image/jpeg"
-                });
+                };
             } else {
-                formData.append("messageType", "text");
                 if (message === "") {
                     // type something;
                     return;
                 }
-                formData.append("messageText", message);
+                messageData["messageText"] = message;
             }
-            formData.append("roomId", combinedId());
-
-
 
             const messageBody = { cid, senderId: { _id: userId, name: 'unknown' }, recepientId, messageType, message, timeStamp: new Date(), imageUrl: imageUri, messageSeen: "sending" };
             setMessages((prevMessages) => [...prevMessages, messageBody]);
@@ -281,12 +256,12 @@ const ChatMessagesScreen = () => {
             checkRecepientIsJoined();
             if (otherUserStatus === false) {
                 // Emit the message with form data to the backend via socket
-                socket.emit("unread-messages", formData);
+                socket.emit("unread-messages", messageData);
                 socket.emit("send-unread-message-count", recepientId);
             }
             else {
                 // Emit the message with form data to the backend via socket
-                socket.emit("read-message", formData);
+                socket.emit("read-message", messageData);
             }
             socket.emit("stop-typing", combinedId());
             // Clear message input and selected image
@@ -297,19 +272,6 @@ const ChatMessagesScreen = () => {
             // fetchMessages();
         } catch (error) {
             console.log("Error in sending the message", error);
-        }
-    }
-
-    async function handleRecordButtonPress() {
-        setRecordedAudio(null);
-        setRecording(null);
-        if (recording) {
-            const audioUri = await stopRecording(recording);
-            if (audioUri) {
-                console.log("Saved audio file to", audioUri);
-            }
-        } else {
-            await startRecording();
         }
     }
 
@@ -362,7 +324,7 @@ const ChatMessagesScreen = () => {
     }, [recepientData, selectedMessages, online, lastSeenTime]);
     const deleteMessages = async (messageIds) => {
         try {
-            const res = await fetch('http://192.168.152.216:8000/delete-messages/', {
+            const res = await fetch('http://10.145.206.139:8000/delete-messages/', {
                 method: 'POST',
                 headers:
                 {
@@ -391,6 +353,7 @@ const ChatMessagesScreen = () => {
             aspect: [4, 3],
             quality: 1,
         });
+        socket.emit("join-chat", { room: combinedId(), senderId: userId, recepientId });
         if (!result.canceled) {
             // Compress the image
             const compressedImage = await ImageManipulator.manipulateAsync(
@@ -446,7 +409,7 @@ const ChatMessagesScreen = () => {
                 return true;
             }
             else {
-                socket.emit("user-left-window", {roomId:combinedId(), userId, recepientId });
+                socket.emit("user-left-window", { roomId: combinedId(), userId, recepientId });
                 return false;
             }
         }
@@ -455,67 +418,6 @@ const ChatMessagesScreen = () => {
             backHandler.remove();
         }
     }, [showModal]);
-
-    async function startRecording() {
-        setIsRecording(true);
-        setRecording(null);
-        setRecordedAudio(null);
-
-        // Check if a recording is already in progress
-        if (isRecording) {
-            console.warn("A recording is already in progress");
-            return;
-        }
-
-        // Check for permissions before starting the recording
-        if (!audioPermission) {
-            console.warn("Audio permission is not granted");
-            return;
-        }
-        try {
-            // needed for IOS, If you develop mainly on IOS device or emulator, 
-            // there will be error if you don't include this.
-            if (audioPermission) {
-                await Audio.setAudioModeAsync({
-                    allowsRecordingIOS: true,
-                    playsInSilentModeIOS: true,
-                });
-            }
-
-            const newRecording = new Audio.Recording();
-            console.log("Starting Recording");
-            await newRecording.prepareToRecordAsync(
-                Audio.RecordingOptionsPresets.HIGH_QUALITY
-            );
-            await newRecording.startAsync();
-            setRecording(newRecording);
-            setRecordingStatus("recording");
-        } catch (error) {
-            console.error("Failed to start recording", error);
-        }
-    }
-
-    async function stopRecording() {
-        setIsRecording(false);
-        try {
-            if (recordingStatus === "recording") {
-                console.log("Stopping Recording");
-                await recording.stopAndUnloadAsync();
-                const uri = recording.getURI();
-                setRecordedAudio({
-                    uri,
-                    name: `recording-${Date.now()}.m4a`, // Change the file extension to .m4a
-                    type: "audio/m4a", // Update the type to M4A
-                });
-
-                // resert our states to record again
-                setRecording(null);
-                setRecordingStatus("stopped");
-            }
-        } catch (error) {
-            console.error("Failed to stop recording", error);
-        }
-    }
 
     return (
         <KeyboardAvoidingView style={styles.container}>
@@ -582,15 +484,21 @@ const ChatMessagesScreen = () => {
                                     source={{ uri: item.imageUrl }}
                                     style={{ width: 200, height: 200, borderRadius: 7 }}
                                 />
-                                {item?.senderId?._id === userId && <Text style={{ textAlign: 'right', fontSize: 9, color: 'gray', marginTop: 5 }}>{item?.messageSeen}</Text>}
+                                {item?.senderId?._id === userId &&
+                                    <Text style={{
+                                        textAlign: "right",
+                                        fontSize: 9,
+                                        right: 10,
+                                        color: "gray",
+                                        marginTop: 5,
+                                    }}
+                                    >{item?.messageSeen}</Text>}
                                 <Text
                                     style={{
                                         textAlign: "right",
                                         fontSize: 9,
-                                        position: "absolute",
                                         right: 10,
-                                        bottom: 7,
-                                        color: "white",
+                                        color: "gray",
                                         marginTop: 5,
                                     }}
                                 >
@@ -628,14 +536,14 @@ const ChatMessagesScreen = () => {
                 <TextInput value={message} onChangeText={handleTyping} style={styles.textInput} placeholder='Type your message...' />
                 <View style={styles.micCameraContainer}>
                     <Entypo onPress={pickImage} name="camera" size={24} color="grey" />
-                    <Feather onPress={handleRecordButtonPress} name="mic" size={24} color="gray" />
+                    <Feather name="mic" size={24} color="gray" />
                 </View>
                 <Pressable onPress={() => handleSend("text")} style={styles.sendBtn}>
                     <Text style={styles.btnText}>Send</Text>
                 </Pressable>
             </View>
             {showEmojiSelector &&
-                <EmojiSelector style={{ height: 250 }} onEmojiSelected={(emoji) => setMessage((prevMessage) => prevMessage + emoji)} />}
+                <EmojiSelector category={Categories.symbols} theme='transparent' style={{ height: 250 }} onEmojiSelected={(emoji) => setMessage((prevMessage) => prevMessage + emoji)} />}
         </KeyboardAvoidingView>
     )
 }

@@ -32,7 +32,7 @@ const HomeScreen = () => {
       const userId = decodedToken.userId;
       setUserId(userId);
       //await AsyncStorage.removeItem("authToken");
-      axios.get(`http://192.168.152.216:8000/user/${userId}`).then((res) => {
+      axios.get(`http://10.145.206.139:8000/user/${userId}`).then((res) => {
         setCurrentUser(res.data);
       }).catch(err => {
         console.log("Error retrieving user", err);
@@ -63,7 +63,7 @@ const HomeScreen = () => {
     const fetchUsers = async () => {
       if(userId)
       {
-        axios.get(`http://192.168.152.216:8000/users/${userId}`).then((res) => {
+        axios.get(`http://10.145.206.139:8000/users/${userId}`).then((res) => {
           setUsers(res.data);
         }).catch(err => {
           console.log("Error retrieving users", err);
