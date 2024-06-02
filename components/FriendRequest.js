@@ -8,7 +8,7 @@ const FriendRequest = ({ item, friendRequests, setFriendRequests }) => {
   const { userId, setUserId } = useContext(UserType);
   const acceptRequest = async (friendRequestId) => {
     try {
-      const res = await fetch('http://10.145.206.139:8000/friend-request/accept',
+      const res = await fetch(`${process.env.EXPO_PUBLIC_APP_SERVER_BASE_URL}/friend-request/accept`,
         {
           method: 'POST',
           headers: {

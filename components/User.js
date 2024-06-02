@@ -24,7 +24,7 @@ const User = ({item}) => {
   {
     try
     {
-      const res=await fetch('http://10.145.206.139:8000/friend-request',{
+      const res=await fetch(`${process.env.EXPO_PUBLIC_APP_SERVER_BASE_URL}/friend-request`,{
         method:'POST',
         headers:{
           "Content-Type":'application/json'

@@ -10,6 +10,8 @@ import ChatScreen from './screens/ChatScreen';
 import ChatMessagesScreen from './screens/ChatMessagesScreen';
 import SingleChatProfile from './screens/SingleChatProfile';
 import ProfileScreen from './screens/ProfileScreen';
+import SelectFriendsScreen from './screens/SelectFriendsScreen';
+import CreateGroupScreen from './screens/CreateGroupScreen';
 
 const StackNavigator=()=>
 {
@@ -25,6 +27,8 @@ const StackNavigator=()=>
                 <Stack.Screen name="Messages" component={ChatMessagesScreen}/>
                 <Stack.Screen name="SingleChatProfile" component={SingleChatProfile} options={{headerShown:false}}/>
                 <Stack.Screen name="Profile" component={ProfileScreen} options={{headerShown:false}}/>
+                <Stack.Screen name="SelectFriends" component={SelectFriendsScreen}/> 
+                <Stack.Screen name="CreateGroup" component={CreateGroupScreen}/> 
             </Stack.Navigator>
         </NavigationContainer>
     );

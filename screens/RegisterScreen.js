@@ -15,6 +15,7 @@ const RegisterScreen = () => {
     const [imageUri, setImageUri] = useState("");
     const navigation = useNavigation();
     const [loading, setLoading] = useState(false);
+
     const handleRegister = () => {
         if (!email || !name || !password || !image) {
             ToastAndroid.show('Please enter all the fields', ToastAndroid.SHORT);
@@ -28,7 +29,7 @@ const RegisterScreen = () => {
             image: image
         };
         setLoading(true);
-        axios.post("http://10.145.206.139:8000/register", user)
+        axios.post(`${process.env.EXPO_PUBLIC_APP_SERVER_BASE_URL}/register`, user)
             .then((res) => {
                 setLoading(false);
                 ToastAndroid.show('Registration Successful', ToastAndroid.SHORT);

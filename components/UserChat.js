@@ -15,7 +15,7 @@ const UserChat = ({ item }) => {
 
   const fetchLastReadMessages = async () => {
     try {
-      const res = await fetch(`http://10.145.206.139:8000/last-message/${userId}/${item._id}`);
+      const res = await fetch(`${process.env.EXPO_PUBLIC_APP_SERVER_BASE_URL}/last-message/${userId}/${item._id}`);
       if (res.ok) {
         const data = await res.json();
         if (data.messages)
@@ -31,7 +31,7 @@ const UserChat = ({ item }) => {
 
   const fetchLastUnreadMessages = async () => {
     try {
-      const res = await fetch(`http://10.145.206.139:8000/unread-last-message/${userId}/${item._id}`);
+      const res = await fetch(`${process.env.EXPO_PUBLIC_APP_SERVER_BASE_URL}/unread-last-message/${userId}/${item._id}`);
       if (res.ok) {
         const data = await res.json();
         if (data.messages)
@@ -45,7 +45,7 @@ const UserChat = ({ item }) => {
 
   const fetchUnreadMessagesCount = async () => {
     try {
-      const res = await fetch(`http://10.145.206.139:8000/unread-message-count/${userId}/${item._id}`);
+      const res = await fetch(`${process.env.EXPO_PUBLIC_APP_SERVER_BASE_URL}/unread-message-count/${userId}/${item._id}`);
       if (res.ok) {
         const data = await res.json();
         if (data.message) {

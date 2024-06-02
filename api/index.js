@@ -8,6 +8,9 @@ const sharp = require('sharp');
 const events=require('./events');
 const { createServer } = require("http");
 const { Server } = require("socket.io");
+const {createClient} =require('redis');
+const { createAdapter } = require('@socket.io/redis-adapter');
+
 const app = express();
 
 const port = 8000;
@@ -35,9 +38,19 @@ mongoose.connect(process.env.DATABASE_CONNECTION_URL, {
     console.log('Error connecting MongoDb', err);
 });
 
-httpServer.listen(port, () => {
-    console.log('Server running on port', port);
-});
+// redis server setup for running multiple backend instances
+(async () => {
+    // const pubClient = createClient({ url: "redis://localhost:6037" });  // Add your Redis URL here
+    // const subClient = pubClient.duplicate();
+  
+    // await Promise.all([pubClient.connect(),subClient.connect()]);
+  
+    // io.adapter(createAdapter(pubClient, subClient));
+  
+    httpServer.listen(process.env.PORT, () => {
+        console.log('Server running on port', process.env.PORT);
+    });
+  })();
 
 
 let onlineUsers = [];
@@ -350,6 +363,7 @@ io.on(events.CONN, (socket) => {
     // event when user get's disconnected
     userDisconnectedEvent(socket);
 });
+
 
 
 // endpoint for the registration of user

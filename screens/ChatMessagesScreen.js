@@ -94,7 +94,7 @@ const ChatMessagesScreen = () => {
 
     const fetchMessages = async () => {
         try {
-            const res = await fetch(`http://10.145.206.139:8000/messages/${userId}/${recepientId}`);
+            const res = await fetch(`${process.env.EXPO_PUBLIC_APP_SERVER_BASE_URL}/messages/${userId}/${recepientId}`);
             const data = await res.json();
             if (res.ok) {
                 setMessages(data.messages);
@@ -117,9 +117,9 @@ const ChatMessagesScreen = () => {
 
     const fetchMessagesAndMarkDelivered = async () => {
         try {
-            const res = await fetch(`http://10.145.206.139:8000/mark-unread-messages/${userId}/${recepientId}`);
+            const res = await fetch(`${process.env.EXPO_PUBLIC_APP_SERVER_BASE_URL}/mark-unread-messages/${userId}/${recepientId}`);
             if (res.ok) {
-                const res2 = await fetch(`http://10.145.206.139:8000/messages/${userId}/${recepientId}`);
+                const res2 = await fetch(`${process.env.EXPO_PUBLIC_APP_SERVER_BASE_URL}/messages/${userId}/${recepientId}`);
                 const data = await res2.json();
                 if (res2.ok) {
                     setMessages(data.messages);
@@ -145,7 +145,7 @@ const ChatMessagesScreen = () => {
         socket.on("online", (status) => {
             setOnline(status);
             if (!status) {
-                fetch(`http://10.145.206.139:8000/last-seen/${recepientId}`)
+                fetch(`${process.env.EXPO_PUBLIC_APP_SERVER_BASE_URL}/last-seen/${recepientId}`)
                     .then(res => {
                         if (res.ok) {
                             return res.json();
@@ -207,7 +207,7 @@ const ChatMessagesScreen = () => {
     useEffect(() => {
         const fetchRecepientsData = async () => {
             try {
-                const res = await fetch(`http://10.145.206.139:8000/user/${recepientId}`);
+                const res = await fetch(`${process.env.EXPO_PUBLIC_APP_SERVER_BASE_URL}/user/${recepientId}`);
                 const data = await res.json();
                 setRecepientData(data);
             }
@@ -324,7 +324,7 @@ const ChatMessagesScreen = () => {
     }, [recepientData, selectedMessages, online, lastSeenTime]);
     const deleteMessages = async (messageIds) => {
         try {
-            const res = await fetch('http://10.145.206.139:8000/delete-messages/', {
+            const res = await fetch(`${process.env.EXPO_PUBLIC_APP_SERVER_BASE_URL}/delete-messages/`, {
                 method: 'POST',
                 headers:
                 {
